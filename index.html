@@ -311,7 +311,7 @@
     </div>
     <div>
       <p class="header-app">XML přiznání DPH → Platby</p>
-      <p class="header-ver">v1.5 · DPHDP3 · DPHKH1 · DPHSHV · Flexi XML</p>
+      <p class="header-ver">v1.6 · DPHDP3 · DPHKH1 · DPHSHV · Flexi XML</p>
     </div>
   </div>
 
@@ -412,7 +412,8 @@ function parseXML(xmlStr) {
 function parseDPHDP3(doc) {
   const vD = doc.querySelector('VetaD');
   const vP = doc.querySelector('VetaP');
-  // Výsledek daně je v Veta6 (reálný výstup z ABRA Flexi)
+  const v1 = doc.querySelector('Veta1');
+  const v4 = doc.querySelector('Veta4');
   const v6 = doc.querySelector('Veta6');
   const errors = [], warnings = [];
 
@@ -445,7 +446,6 @@ function parseDPHDP3(doc) {
   // ── Validace výpočtu DPH (základ × sazba vs. vykázaná daň) ──────────────
   // Tolerance ±1 Kč na řádek (stejně jako EPO), nad to hlásíme odchylku v %
   // Sazby od 2024: 21 % a 12 % (zrušena 15%, sjednocena snížená sazba na 12%)
-  const v1 = doc.querySelector('Veta1');
   if (v1) {
     const checkDan = (zaklad, dan, sazba, label) => {
       const z = parseFloat(zaklad || 0);
@@ -512,7 +512,6 @@ function parseDPHDP3(doc) {
     checkOdp('pln23', 'od_zdp23', 0.21, 'Ř.43 odpočet EU/přenesení 21 %');
     checkOdp('pln5',  'od_zdp5',  0.12, 'Ř.44 odpočet EU/přenesení 12 %');
   }
-  const v4 = doc.querySelector('Veta4');
   if (v4 && v6) {
     const v6odpZocelk  = parseFloat(v6.getAttribute('odp_zocelk') || 0);
     const v4odpSumNar  = parseFloat(v4.getAttribute('odp_sum_nar') || 0);
@@ -547,7 +546,7 @@ function parseDPHDP3(doc) {
     const iban = buildIBAN('705', mat, '0710');
     const vs   = dic.replace(/^CZ/i, '');
     const slat = datumSplatnosti(rok, mesic, ctvrt);
-    const zprav = (nazev || dic).substring(0,50).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
+    const zprav = (nazev || dic).substring(0,60).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
     platba = { iban, castka: danPlatba, vs, ucet: `705-${mat}/0710`, splatnost: slat, zprava: zprav };
   }
 
