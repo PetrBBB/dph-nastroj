@@ -297,6 +297,16 @@
   }
   .toast.show { opacity: 1; }
 
+  /* ── Gmail button ────────────────────────────────── */
+  .btn-gmail {
+    background: var(--primary); color: white;
+    border: none; border-radius: 8px;
+    padding: 10px 16px; font-size: 13px; font-weight: 600;
+    cursor: pointer; width: 100%;
+    transition: background 0.15s;
+  }
+  .btn-gmail:hover { background: var(--primary-hover); }
+
   hr.section-divider { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
 </style>
 </head>
@@ -311,7 +321,7 @@
     </div>
     <div>
       <p class="header-app">XML přiznání DPH → Platby</p>
-      <p class="header-ver">v1.7 · DPHDP3 · DPHKH1 · DPHSHV · Flexi XML</p>
+      <p class="header-ver">v1.9 · DPHDP3 · DPHKH1 · DPHSHV · Flexi XML</p>
     </div>
   </div>
 
@@ -560,7 +570,7 @@ function parseDPHDP3(doc) {
     dic, nazev, kodFu, nazevFu: FU[kodFu]?.nazev || kodFu,
     obdobi: obdobi(rok, mesic, ctvrt),
     forma: {B:'řádné',O:'opravné',D:'dodatečné',E:'dodatečné/opravné'}[forma] || forma,
-    danPlatba, danVraceni, platba, errors, warnings, valid: errors.length===0,
+    danPlatba, danVraceni, platba, errors, warnings, valid: errors.length===0, _doc: doc,
   };
 }
 
@@ -749,7 +759,7 @@ function parseDPHKH1(doc) {
     obdobi: obdobi(rok, mesic, ctvrt),
     forma: {B:'řádné',O:'opravné',N:'následné',E:'následné/opravné'}[forma] || forma,
     danPlatba:null, danVraceni:null, platba:null,
-    errors, warnings, valid: errors.length===0,
+    errors, warnings, valid: errors.length===0, _doc: doc,
   };
 }
 
@@ -789,7 +799,83 @@ function renderAll(items) {
 
   let html = '';
 
-  // Step 2 label
+  // ── Krok 1: Párová kontrola KH ↔ DP ──────────────────────────────────────
+  const dpItems = items.filter(i => i.typ === 'DPHDP3');
+  const khItems = items.filter(i => i.typ === 'DPHKH1');
+  const parovani = [];
+  for (const kh of khItems) {
+    const dp = dpItems.find(d => d.dic === kh.dic && d.obdobi === kh.obdobi);
+    if (dp) parovani.push({ kh, dp });
+  }
+
+  html += `<p class="step-label">Krok 1 — Párová kontrola KH ↔ Přiznání</p>`;
+
+  if (parovani.length === 0) {
+    html += `<div class="hint-box">Nebyl nalezen žádný pár KH + Přiznání se stejným DIČ a obdobím. Nahrajte oba soubory najednou pro křížovou kontrolu součtů.</div>`;
+  } else {
+    for (const { kh, dp } of parovani) {
+      const vC = kh._doc?.querySelector('VetaC');
+      const v1 = dp._doc?.querySelector('Veta1');
+      const v4 = dp._doc?.querySelector('Veta4');
+      const g = (el, a) => parseFloat(el?.getAttribute(a) || 0);
+
+      const radky = [
+        ['Základ plnění na výstupu',          g(vC,'obrat23')+g(vC,'obrat5'),         g(v1,'obrat23')+g(v1,'obrat5'),        'DP ř.1+2 ↔ KH A.4+A.5'],
+        ['Základ přenesení na výstupu',        g(vC,'rez_pren23')+g(vC,'rez_pren5'),   g(v1,'rez_pren23')+g(v1,'rez_pren5'),  'DP ř.3+4 ↔ KH A.1'],
+        ['Základ zahraničních přijatých plnění',g(vC,'celk_zd_a2'),                    g(v1,'p_sl23_e')+g(v1,'p_sl5_e'),      'DP ř.5+6 ↔ KH A.2'],
+        ['Základ přijatých tuzemských plnění', g(vC,'pln23')+g(vC,'pln5'),             g(v4,'pln23')+g(v4,'pln5'),            'DP ř.40+41 ↔ KH B.2+B.3'],
+        ['Základ přijatých přenesení',         g(vC,'rez_pren23')+g(vC,'rez_pren5'),   g(v4,'nar_zdp23')+g(v4,'nar_zdp5'),   'DP ř.43+44 ↔ KH B.1'],
+      ];
+
+      const fmt2 = n => n.toLocaleString('cs-CZ', {minimumFractionDigits:2, maximumFractionDigits:2});
+      const nesody = radky.filter(([,kv,dv]) => kv !== 0 || dv !== 0).filter(([,kv,dv]) => Math.abs(kv-dv) > 1);
+      const shody  = radky.filter(([,kv,dv]) => kv !== 0 || dv !== 0).filter(([,kv,dv]) => Math.abs(kv-dv) <= 1);
+      const nulove = radky.filter(([,kv,dv]) => kv === 0 && dv === 0);
+
+      html += `<div class="result-card">
+        <div class="result-header">
+          <div>
+            <div class="result-title">KH ↔ Přiznání · ${kh.dic}${kh.nazev ? ' · ' + kh.nazev : ''}</div>
+            <div class="result-sub">Zdaňovací období ${kh.obdobi} · ${kh.nazevFu||''}</div>
+          </div>
+          ${nesody.length === 0
+            ? `<span class="pill pill-ok">✓ Součty sedí</span>`
+            : `<span class="pill pill-err">${nesody.length} ${nesody.length===1?'neshoda':'neshody'}</span>`}
+        </div>
+        <div class="result-body" style="padding:0 16px 16px">
+          <table class="main-table" style="margin-top:12px">
+            <thead><tr>
+              <th>Kontrolní řádek</th><th>Mapování</th>
+              <th style="text-align:right">KH (Kč)</th>
+              <th style="text-align:right">DP (Kč)</th>
+              <th style="text-align:center">Stav</th>
+            </tr></thead>
+            <tbody>
+              ${radky.filter(([,kv,dv]) => kv !== 0 || dv !== 0).map(([popis, kv, dv, map]) => {
+                const diff = Math.abs(kv - dv);
+                const ok = diff <= 1;
+                return `<tr>
+                  <td>${popis}</td>
+                  <td style="color:var(--text-faint);font-size:12px">${map}</td>
+                  <td style="text-align:right;font-variant-numeric:tabular-nums">${fmt2(kv)}</td>
+                  <td style="text-align:right;font-variant-numeric:tabular-nums">${fmt2(dv)}</td>
+                  <td style="text-align:center">${ok
+                    ? `<span class="pill pill-ok" style="font-size:11px">✓ OK</span>`
+                    : `<span class="pill pill-err" style="font-size:11px">✕ ${fmt2(diff)} Kč</span>`}
+                  </td>
+                </tr>`;
+              }).join('')}
+              ${nulove.length > 0 ? `<tr><td colspan="5" style="color:var(--text-faint);font-size:12px;text-align:center">${nulove.length} řádků s nulovými hodnotami — přeskočeny</td></tr>` : ''}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+    }
+  }
+
+  html += `<hr class="section-divider">`;
+
+  // ── Krok 2: Výsledky zpracování ───────────────────────────────────────────
   html += `<p class="step-label">Krok 2 — Výsledky zpracování</p>`;
 
   // Summary stats
@@ -877,12 +963,8 @@ function renderAll(items) {
             <div class="data-cell"><div class="data-lbl">Typ podání</div><div class="data-val normal">${item.forma||'—'}</div></div>
             ${item.danPlatba!==null ? `<div class="data-cell span2"><div class="data-lbl">Výsledek přiznání — daňová povinnost (k úhradě)</div><div class="data-val big">${fmtMoney(item.danPlatba)}</div></div>` : ''}
             ${item.danVraceni!==null ? `<div class="data-cell span2"><div class="data-lbl">Výsledek přiznání — nadměrný odpočet (FÚ vrátí klientovi)</div><div class="data-val green">${fmtMoney(item.danVraceni)}</div>
-              <div style="margin-top:10px">
-                <div class="pay-label">Text pro email klientovi</div>
-                <div class="pay-row" style="font-size:13px;font-family:var(--font)">
-                  <span id="email-text-${idx}">Z přiznání k DPH za období ${item.obdobi} Vám finanční úřad vrátí nadměrný odpočet ve výši ${fmtMoney(item.danVraceni)}.</span>
-                  <button class="copy-btn" onclick="cp(document.getElementById('email-text-${idx}').textContent)">📋</button>
-                </div>
+              <div style="margin-top:12px">
+                <button class="btn-gmail" onclick="openGmail('vraceni',${idx})">✉ Otevřít Gmail s připraveným emailem</button>
               </div>
             </div>` : ''}
             ${item.danPlatba===null && item.danVraceni===null && item.typ==='DPHDP3' ? `<div class="data-cell span2"><div class="data-lbl">Výsledek přiznání</div><div class="data-val normal" style="color:var(--text-muted)">Nulové přiznání — daňová povinnost ani nadměrný odpočet nevznikly</div></div>` : ''}
@@ -910,6 +992,9 @@ function renderAll(items) {
             <div class="pay-field">
               <div class="pay-label">Datum splatnosti</div>
               <div class="pay-row"><span>${p.splatnost||'—'}</span></div>
+            </div>
+            <div style="margin-top:4px">
+              <button class="btn-gmail" onclick="openGmail('platba',${idx})">✉ Otevřít Gmail s připraveným emailem</button>
             </div>
           </div>
           <div class="qr-wrap">
@@ -960,6 +1045,42 @@ function renderAll(items) {
       qrEl.innerHTML = '<div style="font-size:11px;color:var(--text-muted);padding:8px">QR nelze vygenerovat</div>';
     }
   });
+}
+
+function openGmail(typ, idx) {
+  const item = _items[idx];
+  if (!item) return;
+
+  // Období ve formátu "04/2026" → "dubna 2026" pro email
+  const mesiceGenitiv = ['','ledna','února','března','dubna','května','června',
+                          'července','srpna','září','října','listopadu','prosince'];
+  let obdobiText = item.obdobi;
+  const mMatch = item.obdobi.match(/^(\d{2})\/(\d{4})$/);
+  const qMatch = item.obdobi.match(/^Q(\d)\/(\d{4})$/);
+  if (mMatch) {
+    const m = parseInt(mMatch[1]);
+    obdobiText = `${mesiceGenitiv[m] || mMatch[1]}. ${mMatch[2]}`;
+  } else if (qMatch) {
+    obdobiText = `${qMatch[1]}. čtvrtletí ${qMatch[2]}`;
+  }
+
+  const podpis = '\n\nS pozdravem\nIng. Petr Bureš\nÚčetní';
+  const predmet = `DPH ${item.obdobi}`;
+
+  let telo;
+  if (typ === 'vraceni' && item.danVraceni !== null) {
+    telo = `Dobrý den,\n\nv příloze zasílám náhled DPH za ${obdobiText}. FÚ bude vracet ${fmtMoney(item.danVraceni)}.${podpis}`;
+  } else if (typ === 'platba' && item.platba) {
+    const p = item.platba;
+    telo = `Dobrý den,\n\nv příloze zasílám náhled DPH za ${obdobiText} a informace k platbě daně.\n\nČástka k úhradě: ${fmtMoney(p.castka)}\nČíslo účtu: ${p.ucet}\nVariabilní symbol: ${p.vs}\nDatum splatnosti: ${p.splatnost||'—'}${podpis}`;
+  } else {
+    return;
+  }
+
+  const url = 'https://mail.google.com/mail/?view=cm'
+    + '&su=' + encodeURIComponent(predmet)
+    + '&body=' + encodeURIComponent(telo);
+  window.open(url, '_blank');
 }
 
 function switchTab(idx, name, btn) {
