@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DPH Nástroj — Přiznání & Platby</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a3a5c'/%3E%3Ctext x='16' y='22' font-family='Arial,sans-serif' font-size='16' font-weight='bold' fill='white' text-anchor='middle'%3ED%3C/text%3E%3Ccircle cx='22' cy='10' r='5' fill='%2322c55e'/%3E%3Ctext x='22' y='14' font-family='Arial,sans-serif' font-size='8' font-weight='bold' fill='white' text-anchor='middle'%3E%25%3C/text%3E%3C/svg%3E">
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
 
@@ -310,7 +311,7 @@
     </div>
     <div>
       <p class="header-app">XML přiznání DPH → Platby</p>
-      <p class="header-ver">v1.1 · DPHDP3 · DPHKH1 · DPHSHV · Flexi XML</p>
+      <p class="header-ver">v1.5 · DPHDP3 · DPHKH1 · DPHSHV · Flexi XML</p>
     </div>
   </div>
 
@@ -431,12 +432,113 @@ function parseDPHDP3(doc) {
   if (!['B','O','D','E'].includes(forma)) warnings.push({t:'warn', msg:`Neočekávaná hodnota dapdph_forma="${forma}" (očekáváno B/O/D/E)`});
   if (kodFu && !FU[kodFu]) errors.push({t:'err', msg:`Kód FÚ "${kodFu}" není v číselníku`});
 
+  // Hlavní ekonomická činnost (c_okec) — povinné dle pokynů
+  const cOkec = vD?.getAttribute('c_okec') || '';
+  if (!cOkec) warnings.push({t:'warn', msg:'Chybí hlavní ekonomická činnost (c_okec / CZ-NACE) — povinný údaj dle pokynů'});
+
+  // Dodatečné přiznání musí mít datum zjištění
+  if (['D','E'].includes(forma)) {
+    const dZjist = vD?.getAttribute('d_zjist') || '';
+    if (!dZjist) errors.push({t:'err', msg:'Dodatečné přiznání: chybí datum zjištění důvodů (d_zjist) — povinný údaj'});
+  }
+
+  // ── Validace výpočtu DPH (základ × sazba vs. vykázaná daň) ──────────────
+  // Tolerance ±1 Kč na řádek (stejně jako EPO), nad to hlásíme odchylku v %
+  // Sazby od 2024: 21 % a 12 % (zrušena 15%, sjednocena snížená sazba na 12%)
+  const v1 = doc.querySelector('Veta1');
+  if (v1) {
+    const checkDan = (zaklad, dan, sazba, label) => {
+      const z = parseFloat(zaklad || 0);
+      const d = parseFloat(dan || 0);
+      if (z === 0 && d === 0) return;
+      const expected = Math.round(z * sazba);
+      const diff = Math.abs(d - expected);
+      if (diff > 1) {
+        const pct = ((diff / Math.max(expected, 1)) * 100).toFixed(2);
+        warnings.push({t:'warn', msg:`${label}: základ ${z.toLocaleString('cs-CZ')} Kč → očekávaná daň ${expected.toLocaleString('cs-CZ')} Kč, vykázáno ${Math.round(d).toLocaleString('cs-CZ')} Kč (odchylka ${pct} %)`});
+      }
+    };
+    // Kompletní validace základ × sazba → daň pro všechny řádky přiznání
+    // Tolerance ±1 Kč (zaokrouhlení není chyba), nad to hlásíme odchylku v %
+    const PARY = [
+      ['obrat23',   'dan23',       0.21, 'Ř.1 dodání zboží/služeb 21 %'],
+      ['obrat5',    'dan5',        0.12, 'Ř.2 dodání zboží/služeb 12 %'],
+      ['rez_pren23','dan_rpren23', 0.21, 'Ř.3 přenesení DPH 21 %'],
+      ['rez_pren5', 'dan_rpren5',  0.12, 'Ř.3 přenesení DPH 12 %'],
+      ['p_sl23_e',  'dan_psl23_e', 0.21, 'Ř.5 přijetí služeb z EU 21 %'],
+      ['p_sl5_e',   'dan_psl5_e',  0.12, 'Ř.6 přijetí služeb z EU 12 %'],
+      ['p_zb23',    'dan_pzb23',   0.21, 'Ř.7/8 dovoz zboží 21 %'],
+      ['p_zb5',     'dan_pzb5',    0.12, 'Ř.7/8 dovoz zboží 12 %'],
+      ['dov_zb23',  'dan_dzb23',   0.21, 'Ř.7/8 dovoz zboží (celnice) 21 %'],
+      ['dov_zb5',   'dan_dzb5',    0.12, 'Ř.7/8 dovoz zboží (celnice) 12 %'],
+      ['p_sl23_z',  'dan_psl23_z', 0.21, 'Ř.12 ostatní zahraniční plnění 21 %'],
+      ['p_sl5_z',   'dan_psl5_z',  0.12, 'Ř.13 ostatní zahraniční plnění 12 %'],
+    ];
+    PARY.forEach(([zakladAttr, danAttr, sazba, label]) => checkDan(
+      v1.getAttribute(zakladAttr), v1.getAttribute(danAttr), sazba, label
+    ));
+
+    // Křížová kontrola dan_zocelk (Veta6) = součet všech daní na výstupu (Veta1)
+    // dle pokynů: ř.62 = součet ř.1–13 + ř.25
+    if (v6) {
+      const v6danZocelk = parseFloat(v6.getAttribute('dan_zocelk') || 0);
+      const sumDanVystup = [
+        'dan23','dan5','dan_dzb23','dan_dzb5',
+        'dan_rpren23','dan_rpren5',
+        'dan_pzb23','dan_pzb5',
+        'dan_psl23_e','dan_psl23_z','dan_psl5_e','dan_psl5_z',
+        'dan_pdop_nrg'
+      ].reduce((s, attr) => s + (parseFloat(v1.getAttribute(attr) || 0)), 0);
+      if (Math.abs(v6danZocelk - sumDanVystup) > 1) {
+        warnings.push({t:'warn', msg:`Ř.62 (dan_zocelk=${Math.round(v6danZocelk).toLocaleString('cs-CZ')} Kč) neodpovídá součtu daní na výstupu z Veta1 (${Math.round(sumDanVystup).toLocaleString('cs-CZ')} Kč) — možná chyba výpočtu`});
+      }
+    }
+  }
+
+  // Křížová kontrola odpočtů z přijatých plnění kde příjemce přiznává (Veta4)
+  // ř.43: pln23 × 0.21 ≈ od_zdp23, ř.44: pln5 × 0.12 ≈ od_zdp5
+  if (v4) {
+    const checkOdp = (zakladAttr, danAttr, sazba, label) => {
+      const z = parseFloat(v4.getAttribute(zakladAttr) || 0);
+      const d = parseFloat(v4.getAttribute(danAttr) || 0);
+      if (z === 0 && d === 0) return;
+      const expected = Math.round(z * sazba);
+      const diff = Math.abs(d - expected);
+      if (diff > 1) {
+        const pct = ((diff / Math.max(expected, 1)) * 100).toFixed(2);
+        warnings.push({t:'warn', msg:`${label}: základ odpočtu ${z.toLocaleString('cs-CZ')} Kč → očekávaný odpočet ${expected.toLocaleString('cs-CZ')} Kč, vykázáno ${Math.round(d).toLocaleString('cs-CZ')} Kč (odchylka ${pct} %)`});
+      }
+    };
+    checkOdp('pln23', 'od_zdp23', 0.21, 'Ř.43 odpočet EU/přenesení 21 %');
+    checkOdp('pln5',  'od_zdp5',  0.12, 'Ř.44 odpočet EU/přenesení 12 %');
+  }
+  const v4 = doc.querySelector('Veta4');
+  if (v4 && v6) {
+    const v6odpZocelk  = parseFloat(v6.getAttribute('odp_zocelk') || 0);
+    const v4odpSumNar  = parseFloat(v4.getAttribute('odp_sum_nar') || 0);
+    if (Math.abs(v6odpZocelk - v4odpSumNar) > 1) {
+      warnings.push({t:'warn', msg:`Ř.63 (odp_zocelk=${Math.round(v6odpZocelk).toLocaleString('cs-CZ')} Kč) neodpovídá celkovému odpočtu z Veta4 odp_sum_nar (${Math.round(v4odpSumNar).toLocaleString('cs-CZ')} Kč)`});
+    }
+  }
+
+  // Vzájemná exkluzivita dano_da a dan_vrac — nemohou být obě > 0
+  if (v6) {
+    const daDa   = parseFloat(v6.getAttribute('dano_da') || 0);
+    const daVrac = parseFloat(v6.getAttribute('dan_vrac') || 0);
+    if (daDa > 0 && daVrac > 0) {
+      errors.push({t:'err', msg:`Ř.64 (daňová povinnost ${Math.round(daDa).toLocaleString('cs-CZ')} Kč) i ř.65 (nadměrný odpočet ${Math.round(daVrac).toLocaleString('cs-CZ')} Kč) jsou zároveň kladné — jeden z nich musí být nulový`});
+    }
+  }
+
   let danPlatba = null, danVraceni = null;
   if (v6) {
-    const r64 = parseFloat(v6.getAttribute('dan_zocelk'));
-    const r65 = parseFloat(v6.getAttribute('odp_zocelk'));
-    if (!isNaN(r64) && r64 > 0) danPlatba  = r64;
-    if (!isNaN(r65) && r65 > 0) danVraceni = r65;
+    // dano_da = výsledná daňová povinnost k úhradě (řádek 64 tiskopisu)
+    // dan_vrac = nadměrný odpočet k vrácení FÚ (řádek 65 tiskopisu)
+    // Vždy platí jen jeden z nich — buď platba, nebo vrácení, nebo nula
+    const platba  = parseFloat(v6.getAttribute('dano_da'));
+    const vraceni = parseFloat(v6.getAttribute('dan_vrac'));
+    if (!isNaN(platba)  && platba  > 0) danPlatba  = platba;
+    if (!isNaN(vraceni) && vraceni > 0) danVraceni = vraceni;
   }
 
   let platba = null;
@@ -461,22 +563,189 @@ function parseDPHDP3(doc) {
 function parseDPHKH1(doc) {
   const vD = doc.querySelector('VetaD');
   const vP = doc.querySelector('VetaP');
-  const errors = [];
-  const dic   = vP?.getAttribute('dic') || '';
-  const nazev = vP?.getAttribute('zkrobchjm') || vP?.getAttribute('obchodni_firma') || vP?.getAttribute('prijmeni') || '';
-  const kodFu = vP?.getAttribute('c_ufo') || vD?.getAttribute('c_ufo') || '';
-  const rok   = vD?.getAttribute('rok') || '';
-  const mesic = vD?.getAttribute('mesic') || '';
-  const ctvrt = vD?.getAttribute('ctvrt') || '';
-  if (!dic)   errors.push({t:'err', msg:'Chybí DIČ plátce'});
-  if (!kodFu) errors.push({t:'err', msg:'Chybí kód finančního úřadu'});
-  if (!rok)   errors.push({t:'err', msg:'Chybí rok'});
+  const errors = [], warnings = [];
+
+  const dic    = vP?.getAttribute('dic') || '';
+  const nazev  = vP?.getAttribute('zkrobchjm') || vP?.getAttribute('obchodni_firma') || vP?.getAttribute('prijmeni') || '';
+  const kodFu  = vP?.getAttribute('c_ufo') || vD?.getAttribute('c_ufo') || '';
+  const rok    = vD?.getAttribute('rok') || '';
+  const mesic  = vD?.getAttribute('mesic') || '';
+  const ctvrt  = vD?.getAttribute('ctvrt') || '';
+  const forma  = vD?.getAttribute('khdph_forma') || '';
+
+  // ── Záhlaví ──────────────────────────────────────────────────────────────
+  if (!dic)   errors.push({t:'err', msg:'Chybí DIČ plátce (atribut dic v VetaP)'});
+  if (!kodFu) errors.push({t:'err', msg:'Chybí kód finančního úřadu (c_ufo)'});
+  if (kodFu && !FU[kodFu]) errors.push({t:'err', msg:`Kód FÚ "${kodFu}" není v číselníku`});
+  if (!rok)   errors.push({t:'err', msg:'Chybí rok zdaňovacího období'});
+  if (!mesic && !ctvrt) errors.push({t:'err', msg:'Chybí měsíc nebo čtvrtletí zdaňovacího období'});
+  if (!['B','O','N','E'].includes(forma)) warnings.push({t:'warn', msg:`Neočekávaná hodnota khdph_forma="${forma}" (očekáváno B=řádné, O=opravné, N=následné, E=následné/opravné)`});
+  // Následné KH musí mít datum zjištění nebo č.j. výzvy
+  if (['N','E'].includes(forma)) {
+    const dZjist = vD?.getAttribute('d_zjist') || '';
+    const cJedV  = vD?.getAttribute('c_jed_vyzvy') || '';
+    if (!dZjist && !cJedV) errors.push({t:'err', msg:'Následné KH: musí být vyplněno datum zjištění (d_zjist) nebo č.j. výzvy (c_jed_vyzvy)'});
+  }
+
+  // ── Pomocné funkce ────────────────────────────────────────────────────────
+  // Platné kódy EU zemí pro VAT ID dle pokynů 2024
+  const EU_KODY = new Set(['BE','BG','CZ','DK','EE','FI','FR','HR','IE','IT','CY','LT','LV','LU','HU','MT','DE','NL','PL','PT','AT','RO','EL','XI','SK','SI','ES','SE','GB']);
+
+  // Validace formátu VAT ID dle pokynů 2024 (délky bez kódu státu)
+  const VAT_DELKY = {BE:10,BG:9,CZ:8,DK:8,EE:9,FI:8,FR:11,HR:11,IE:8,IT:11,CY:9,LT:9,LV:11,LU:8,HU:8,MT:8,DE:9,NL:12,PL:10,PT:9,AT:9,RO:10,EL:9,XI:9,SK:10,SI:8,ES:9,SE:12,GB:9};
+  // Minimální délky (některé státy mají variabilní délku)
+  const VAT_MIN   = {BE:10,BG:9,CZ:8,DK:8,EE:9,FI:8,FR:11,HR:11,IE:8,IT:11,CY:9,LT:9,LV:11,LU:8,HU:8,MT:8,DE:9,NL:12,PL:10,PT:9,AT:9,RO:2,EL:9,XI:9,SK:10,SI:8,ES:9,SE:12,GB:9};
+
+  function chkVatId(kodStatu, vatId, label, evid) {
+    // Dle pokynů: kód státu + VAT ID tvoří identifikaci dodavatele/odběratele
+    // Obě pole buď vyplněna, nebo obě prázdná (mimo EU dodavatel)
+    const maKod = !!(kodStatu && kodStatu.trim());
+    const maVat = !!(vatId && vatId.trim());
+    if (maKod && !maVat) {
+      errors.push({t:'err', msg:`${label} (č. dokladu ${evid}): vyplněn kód státu "${kodStatu}", ale chybí VAT ID`});
+    } else if (!maKod && maVat) {
+      errors.push({t:'err', msg:`${label} (č. dokladu ${evid}): vyplněno VAT ID "${vatId}", ale chybí kód státu`});
+    } else if (maKod && maVat) {
+      // Kód státu musí být z číselníku EU
+      if (!EU_KODY.has(kodStatu.toUpperCase())) {
+        warnings.push({t:'warn', msg:`${label} (č. dokladu ${evid}): kód státu "${kodStatu}" není v číselníku EU zemí`});
+      }
+      // Formát VAT ID — dle pokynů bez mezer, bez kódu státu
+      const vatClean = vatId.replace(/\s/g,'');
+      const min = VAT_MIN[kodStatu.toUpperCase()] || 2;
+      const max = (VAT_DELKY[kodStatu.toUpperCase()] || 12) + 2; // +2 tolerance pro některé státy
+      if (vatClean.length < min || vatClean.length > max) {
+        warnings.push({t:'warn', msg:`${label} (č. dokladu ${evid}): VAT ID "${vatId}" pro stát ${kodStatu} — neočekávaná délka (${vatClean.length} znaků, očekáváno ${min})`});
+      }
+    }
+    // Obě prázdná = dodavatel mimo EU = OK (propustná chyba EPO, ale formálně správně)
+    return maKod || maVat; // vrátí true pokud je identifikace vyplněna
+  }
+
+  // ── A.1: Uskutečněná přenesení DPH ────────────────────────────────────────
+  // Povinné: DIČ odběratele (české), EVID, DUZP, základ daně, kód předmětu plnění
+  const PLATNE_KODY_PREDMETU = new Set(['1','1a','3','3a','4','4a','5','6','7','11','12','13','14','15','16','17','18','19','20','21']);
+  doc.querySelectorAll('VetaA1').forEach(el => {
+    const evid    = el.getAttribute('c_evid_dd') || '?';
+    const dicOdb  = el.getAttribute('dic_odb') || '';
+    const duzp    = el.getAttribute('duzp') || '';
+    const kodPred = el.getAttribute('kod_pred_pl') || '';
+    const zaklD   = el.getAttribute('zakl_dane') || el.getAttribute('zakl_dane1') || '';
+    const r = el.getAttribute('c_radku') || '?';
+    if (!dicOdb) errors.push({t:'err', msg:`A.1 řádek ${r} (${evid}): chybí DIČ odběratele — povinné pole`});
+    if (!duzp)   errors.push({t:'err', msg:`A.1 řádek ${r} (${evid}): chybí datum uskutečnění plnění (DUZP)`});
+    if (!kodPred) errors.push({t:'err', msg:`A.1 řádek ${r} (${evid}): chybí kód předmětu plnění`});
+    else if (!PLATNE_KODY_PREDMETU.has(kodPred)) warnings.push({t:'warn', msg:`A.1 řádek ${r} (${evid}): kód předmětu plnění "${kodPred}" není v aktuálním číselníku`});
+    if (!zaklD)  errors.push({t:'err', msg:`A.1 řádek ${r} (${evid}): chybí základ daně`});
+  });
+
+  // ── A.2: Přijatá plnění od zahraničních osob (§108/2,3) ───────────────────
+  // Povinné: DPPD, základ daně, daň
+  // Identifikace dodavatele: kód státu + VAT ID — OBOJÍ nebo OBOJÍ prázdné
+  // Prázdné = dodavatel mimo EU bez VAT ID = propustná chyba EPO (kód 58+60), formálně OK
+  doc.querySelectorAll('VetaA2').forEach(el => {
+    const evid    = el.getAttribute('c_evid_dd') || '?';
+    const r       = el.getAttribute('c_radku') || '?';
+    const kodSt   = el.getAttribute('k_stat') || '';
+    const vatId   = el.getAttribute('dic_dod') || '';
+    const dppd    = el.getAttribute('dppd') || '';
+    const zaklD1  = el.getAttribute('zakl_dane1') || '';
+    if (!dppd)   errors.push({t:'err', msg:`A.2 řádek ${r} (${evid}): chybí datum povinnosti přiznat daň (DPPD)`});
+    if (!zaklD1) errors.push({t:'err', msg:`A.2 řádek ${r} (${evid}): chybí základ daně`});
+    const maIdent = chkVatId(kodSt, vatId, `A.2 řádek ${r}`, evid);
+    // Pokud jsou obě prázdné — informační varování (EPO kód 58+60, propustné)
+    if (!maIdent) {
+      warnings.push({t:'warn', msg:`A.2 řádek ${r} (${evid}): identifikace dodavatele není vyplněna — EPO zobrazí propustné chyby 58+60. Správné pouze pokud dodavatel nemá EU VAT ID (mimo EU)`});
+    }
+  });
+
+  // ── A.3: Investiční zlato ─────────────────────────────────────────────────
+  // Pouze informační — jen základní kontrola přítomnosti dat
+  doc.querySelectorAll('VetaA3').forEach(el => {
+    const evid = el.getAttribute('c_evid_dd') || '?';
+    const r    = el.getAttribute('c_radku') || '?';
+    const duzp = el.getAttribute('duzp') || '';
+    if (!duzp) errors.push({t:'err', msg:`A.3 řádek ${r} (${evid}): chybí DUZP`});
+  });
+
+  // ── A.4: Uskutečněná plnění nad 10 000 Kč ────────────────────────────────
+  // DIČ odběratele: povinné pro plátce DPH a právnické osoby
+  // Pokud odběratel nemá DIČ (FO nepodnikatel) — pole prázdné, do A.5
+  // Dle pokynů: "DIČ odběratele musí být povinně vyplněno" v A.4
+  doc.querySelectorAll('VetaA4').forEach(el => {
+    const evid   = el.getAttribute('c_evid_dd') || '?';
+    const r      = el.getAttribute('c_radku') || '?';
+    const dicOdb = el.getAttribute('dic_odb') || '';
+    const dppd   = el.getAttribute('dppd') || '';
+    const zaklD1 = el.getAttribute('zakl_dane1') || '';
+    if (!dicOdb) errors.push({t:'err', msg:`A.4 řádek ${r} (${evid}): chybí DIČ odběratele — povinné pole. Plnění bez DIČ patří do A.5`});
+    if (!dppd)   errors.push({t:'err', msg:`A.4 řádek ${r} (${evid}): chybí datum povinnosti přiznat daň (DPPD)`});
+    if (!zaklD1) errors.push({t:'err', msg:`A.4 řádek ${r} (${evid}): chybí základ daně`});
+    if (!el.getAttribute('c_evid_dd')) errors.push({t:'err', msg:`A.4 řádek ${r}: chybí evidenční číslo daňového dokladu`});
+  });
+
+  // ── B.1: Přijatá plnění v tuzemském přenesení DPH ────────────────────────
+  // Povinné: DIČ dodavatele (české), EVID, DUZP, základ daně, kód předmětu plnění
+  doc.querySelectorAll('VetaB1').forEach(el => {
+    const evid    = el.getAttribute('c_evid_dd') || '?';
+    const r       = el.getAttribute('c_radku') || '?';
+    const dicDod  = el.getAttribute('dic_dod') || '';
+    const duzp    = el.getAttribute('duzp') || '';
+    const kodPred = el.getAttribute('kod_pred_pl') || '';
+    const zaklD1  = el.getAttribute('zakl_dane1') || '';
+    if (!dicDod) errors.push({t:'err', msg:`B.1 řádek ${r} (${evid}): chybí DIČ dodavatele — povinné pole`});
+    if (!duzp)   errors.push({t:'err', msg:`B.1 řádek ${r} (${evid}): chybí datum uskutečnění plnění (DUZP)`});
+    if (!kodPred) errors.push({t:'err', msg:`B.1 řádek ${r} (${evid}): chybí kód předmětu plnění`});
+    else if (!PLATNE_KODY_PREDMETU.has(kodPred)) warnings.push({t:'warn', msg:`B.1 řádek ${r} (${evid}): kód předmětu plnění "${kodPred}" není v aktuálním číselníku`});
+    if (!zaklD1) errors.push({t:'err', msg:`B.1 řádek ${r} (${evid}): chybí základ daně`});
+  });
+
+  // ── B.2: Přijatá plnění nad 10 000 Kč (standardní režim) ─────────────────
+  // Povinné: DIČ dodavatele, EVID, DPPD, základ daně, daň
+  doc.querySelectorAll('VetaB2').forEach(el => {
+    const evid   = el.getAttribute('c_evid_dd') || '?';
+    const r      = el.getAttribute('c_radku') || '?';
+    const dicDod = el.getAttribute('dic_dod') || '';
+    const dppd   = el.getAttribute('dppd') || '';
+    const zaklD1 = el.getAttribute('zakl_dane1') || '';
+    if (!dicDod) errors.push({t:'err', msg:`B.2 řádek ${r} (${evid}): chybí DIČ dodavatele — povinné pole`});
+    if (!dppd)   errors.push({t:'err', msg:`B.2 řádek ${r} (${evid}): chybí datum povinnosti přiznat daň (DPPD)`});
+    if (!zaklD1) errors.push({t:'err', msg:`B.2 řádek ${r} (${evid}): chybí základ daně`});
+  });
+
+  // ── B.3: Přijatá plnění pod 10 000 Kč (souhrn) ───────────────────────────
+  // Žádné DIČ — pouze součty, jen kontrola čísel
+  doc.querySelectorAll('VetaB3').forEach(el => {
+    const zaklD1 = el.getAttribute('zakl_dane1') || '';
+    const dan1   = el.getAttribute('dan1') || '';
+    if (!zaklD1 && !dan1) warnings.push({t:'warn', msg:'B.3: prázdný souhrnný řádek (nulový základ i daň)'});
+  });
+
+  // ── A.5: Souhrn uskutečněných plnění pod 10 000 Kč / bez DIČ ─────────────
+  // Žádné DIČ — pouze součty
+  // (žádné další validace potřeba)
+
+  // ── VetaC: Kontrolní součty ───────────────────────────────────────────────
+  // EPO kontroluje, zda součty VetaC souhlasí s detailními řádky
+  const vC = doc.querySelector('VetaC');
+  if (vC) {
+    // Spočítáme součty ze sekcí A
+    const sumA4_zd1 = [...doc.querySelectorAll('VetaA4')].reduce((s,e) => s + (parseFloat(e.getAttribute('zakl_dane1'))||0), 0);
+    const cObrat23  = parseFloat(vC.getAttribute('obrat23') || 0);
+    // Tolerance ±1 Kč na celkový součet
+    // Poznámka: A5 také vstupuje do obrat23 — kontrolujeme pouze pokud jsou dostupná data
+    if (doc.querySelectorAll('VetaA5').length === 0 && Math.abs(sumA4_zd1 - cObrat23) > 1) {
+      warnings.push({t:'warn', msg:`VetaC: součet A.4 základů daně 23% (${sumA4_zd1.toFixed(2)} Kč) nesouhlasí s kontrolním součtem obrat23 (${cObrat23.toFixed(2)} Kč)`});
+    }
+  }
+
   return {
     typ:'DPHKH1', typLabel:'Kontrolní hlášení DPH',
     dic, nazev, kodFu, nazevFu: FU[kodFu]?.nazev || kodFu,
-    obdobi: obdobi(rok, mesic, ctvrt), forma:'hlášení',
+    obdobi: obdobi(rok, mesic, ctvrt),
+    forma: {B:'řádné',O:'opravné',N:'následné',E:'následné/opravné'}[forma] || forma,
     danPlatba:null, danVraceni:null, platba:null,
-    errors, warnings:[], valid: errors.length===0,
+    errors, warnings, valid: errors.length===0,
   };
 }
 
@@ -600,9 +869,17 @@ function renderAll(items) {
             <div class="data-cell"><div class="data-lbl">Zdaňovací období</div><div class="data-val">${item.obdobi}</div></div>
             <div class="data-cell"><div class="data-lbl">Finanční úřad</div><div class="data-val normal" style="font-size:13px">${item.nazevFu||'—'}</div></div>
             <div class="data-cell"><div class="data-lbl">Typ podání</div><div class="data-val normal">${item.forma||'—'}</div></div>
-            ${item.danPlatba!==null ? `<div class="data-cell span2"><div class="data-lbl">Daňová povinnost (k úhradě)</div><div class="data-val big">${fmtMoney(item.danPlatba)}</div></div>` : ''}
-            ${item.danVraceni!==null ? `<div class="data-cell span2"><div class="data-lbl">Nadměrný odpočet (k vrácení)</div><div class="data-val green">${fmtMoney(item.danVraceni)}</div></div>` : ''}
-            ${item.danPlatba===null && item.danVraceni===null && item.typ==='DPHDP3' ? `<div class="data-cell span2"><div class="data-lbl">Výsledek</div><div class="data-val normal" style="color:var(--text-muted)">Nulové přiznání nebo výsledek nebyl v XML nalezen</div></div>` : ''}
+            ${item.danPlatba!==null ? `<div class="data-cell span2"><div class="data-lbl">Výsledek přiznání — daňová povinnost (k úhradě)</div><div class="data-val big">${fmtMoney(item.danPlatba)}</div></div>` : ''}
+            ${item.danVraceni!==null ? `<div class="data-cell span2"><div class="data-lbl">Výsledek přiznání — nadměrný odpočet (FÚ vrátí klientovi)</div><div class="data-val green">${fmtMoney(item.danVraceni)}</div>
+              <div style="margin-top:10px">
+                <div class="pay-label">Text pro email klientovi</div>
+                <div class="pay-row" style="font-size:13px;font-family:var(--font)">
+                  <span id="email-text-${idx}">Z přiznání k DPH za období ${item.obdobi} Vám finanční úřad vrátí nadměrný odpočet ve výši ${fmtMoney(item.danVraceni)}.</span>
+                  <button class="copy-btn" onclick="cp(document.getElementById('email-text-${idx}').textContent)">📋</button>
+                </div>
+              </div>
+            </div>` : ''}
+            ${item.danPlatba===null && item.danVraceni===null && item.typ==='DPHDP3' ? `<div class="data-cell span2"><div class="data-lbl">Výsledek přiznání</div><div class="data-val normal" style="color:var(--text-muted)">Nulové přiznání — daňová povinnost ani nadměrný odpočet nevznikly</div></div>` : ''}
           </div>
         </div>`;
 
