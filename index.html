@@ -136,7 +136,7 @@
   /* ── Stats grid (like app.py) ────────────────────── */
   .stats-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 10px;
     margin-bottom: 1.25rem;
   }
@@ -311,7 +311,7 @@
     </div>
     <div>
       <p class="header-app">XML přiznání DPH → Platby</p>
-      <p class="header-ver">v1.6 · DPHDP3 · DPHKH1 · DPHSHV · Flexi XML</p>
+      <p class="header-ver">v1.7 · DPHDP3 · DPHKH1 · DPHSHV · Flexi XML</p>
     </div>
   </div>
 
@@ -495,8 +495,11 @@ function parseDPHDP3(doc) {
     }
   }
 
-  // Křížová kontrola odpočtů z přijatých plnění kde příjemce přiznává (Veta4)
-  // ř.43: pln23 × 0.21 ≈ od_zdp23, ř.44: pln5 × 0.12 ≈ od_zdp5
+  // Křížová kontrola odpočtů (Veta4) — správné párování dle tiskopisu vzor 26:
+  // ř.40: základ pln23 × 0.21 → daň odp_tuz23_nar (tuzemská přijatá plnění 21%)
+  // ř.41: základ pln5  × 0.12 → daň odp_tuz5_nar  (tuzemská přijatá plnění 12%)
+  // ř.43: základ nar_zdp23 × 0.21 → daň od_zdp23  (EU/přenesení 21%)
+  // ř.44: základ nar_zdp5  × 0.12 → daň od_zdp5   (EU/přenesení 12%)
   if (v4) {
     const checkOdp = (zakladAttr, danAttr, sazba, label) => {
       const z = parseFloat(v4.getAttribute(zakladAttr) || 0);
@@ -509,8 +512,10 @@ function parseDPHDP3(doc) {
         warnings.push({t:'warn', msg:`${label}: základ odpočtu ${z.toLocaleString('cs-CZ')} Kč → očekávaný odpočet ${expected.toLocaleString('cs-CZ')} Kč, vykázáno ${Math.round(d).toLocaleString('cs-CZ')} Kč (odchylka ${pct} %)`});
       }
     };
-    checkOdp('pln23', 'od_zdp23', 0.21, 'Ř.43 odpočet EU/přenesení 21 %');
-    checkOdp('pln5',  'od_zdp5',  0.12, 'Ř.44 odpočet EU/přenesení 12 %');
+    checkOdp('pln23',    'odp_tuz23_nar', 0.21, 'Ř.40 tuzemský odpočet 21 %');
+    checkOdp('pln5',     'odp_tuz5_nar',  0.12, 'Ř.41 tuzemský odpočet 12 %');
+    checkOdp('nar_zdp23','od_zdp23',      0.21, 'Ř.43 odpočet EU/přenesení 21 %');
+    checkOdp('nar_zdp5', 'od_zdp5',       0.12, 'Ř.44 odpočet EU/přenesení 12 %');
   }
   if (v4 && v6) {
     const v6odpZocelk  = parseFloat(v6.getAttribute('odp_zocelk') || 0);
@@ -791,13 +796,15 @@ function renderAll(items) {
   const total     = items.length;
   const okCount   = items.filter(i => i.valid).length;
   const errCount  = items.filter(i => !i.valid).length;
+  const warnCount = items.reduce((s,i) => s + (i.warnings?.length||0), 0);
   const platbaSum = items.filter(i => i.platba).reduce((s,i) => s + i.platba.castka, 0);
 
   html += `<div class="stats-grid">
     <div class="stat-card neutral"><div class="stat-label">Souborů</div><div class="stat-value">${total}</div></div>
     <div class="stat-card ${okCount===total?'green':'neutral'}"><div class="stat-label">Validní</div><div class="stat-value">${okCount}</div></div>
     <div class="stat-card ${errCount>0?'red':'neutral'}"><div class="stat-label">Chyby</div><div class="stat-value">${errCount}</div></div>
-    <div class="stat-card ${platbaSum>0?'neutral':'neutral'}"><div class="stat-label">K úhradě celkem</div><div class="stat-value small">${platbaSum>0 ? fmtMoney(platbaSum) : '—'}</div></div>
+    <div class="stat-card ${warnCount>0?'neutral':'neutral'}"><div class="stat-label">Varování</div><div class="stat-value">${warnCount}</div></div>
+    <div class="stat-card neutral"><div class="stat-label">K úhradě celkem</div><div class="stat-value small">${platbaSum>0 ? fmtMoney(platbaSum) : '—'}</div></div>
   </div>`;
 
   // Table overview if >1
