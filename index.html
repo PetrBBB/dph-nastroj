@@ -321,7 +321,7 @@
     </div>
     <div>
       <p class="header-app">XML přiznání DPH → Platby</p>
-      <p class="header-ver">v1.9 · DPHDP3 · DPHKH1 · DPHSHV · Flexi XML</p>
+      <p class="header-ver">v1.12 · DPHDP3 · DPHKH1 · DPHSHV · Flexi XML</p>
     </div>
   </div>
 
@@ -1051,18 +1051,8 @@ function openGmail(typ, idx) {
   const item = _items[idx];
   if (!item) return;
 
-  // Období ve formátu "04/2026" → "dubna 2026" pro email
-  const mesiceGenitiv = ['','ledna','února','března','dubna','května','června',
-                          'července','srpna','září','října','listopadu','prosince'];
-  let obdobiText = item.obdobi;
-  const mMatch = item.obdobi.match(/^(\d{2})\/(\d{4})$/);
-  const qMatch = item.obdobi.match(/^Q(\d)\/(\d{4})$/);
-  if (mMatch) {
-    const m = parseInt(mMatch[1]);
-    obdobiText = `${mesiceGenitiv[m] || mMatch[1]}. ${mMatch[2]}`;
-  } else if (qMatch) {
-    obdobiText = `${qMatch[1]}. čtvrtletí ${qMatch[2]}`;
-  }
+  // Období ve formátu "04/2026" nebo "Q1/2026" — použijeme přímo v emailu
+  let obdobiText = item.obdobi; // např. "04/2026" nebo "Q1/2026" — použijeme přímo
 
   const podpis = '\n\nS pozdravem\nIng. Petr Bureš\nÚčetní';
   const predmet = `DPH ${item.obdobi}`;
