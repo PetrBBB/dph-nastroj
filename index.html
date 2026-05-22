@@ -411,12 +411,14 @@ function parseXML(xmlStr) {
 function parseDPHDP3(doc) {
   const vD = doc.querySelector('VetaD');
   const vP = doc.querySelector('VetaP');
-  const vV = doc.querySelector('VetaV');
+  // Výsledek daně je v Veta6 (reálný výstup z ABRA Flexi)
+  const v6 = doc.querySelector('Veta6');
   const errors = [], warnings = [];
 
   const dic    = vP?.getAttribute('dic') || vP?.getAttribute('c_dph') || '';
-  const nazev  = vP?.getAttribute('naz_subjektu') || vP?.getAttribute('obchodni_firma') || vP?.getAttribute('prijmeni') || '';
-  const kodFu  = vD?.getAttribute('c_ufo') || '';
+  const nazev  = vP?.getAttribute('zkrobchjm') || vP?.getAttribute('naz_subjektu') || vP?.getAttribute('obchodni_firma') || vP?.getAttribute('prijmeni') || '';
+  // c_ufo je v VetaP (ne VetaD) — ověřeno na reálných souborech z ABRA Flexi
+  const kodFu  = vP?.getAttribute('c_ufo') || vD?.getAttribute('c_ufo') || '';
   const rok    = vD?.getAttribute('rok') || '';
   const mesic  = vD?.getAttribute('mesic') || '';
   const ctvrt  = vD?.getAttribute('ctvrt') || '';
@@ -430,9 +432,9 @@ function parseDPHDP3(doc) {
   if (kodFu && !FU[kodFu]) errors.push({t:'err', msg:`Kód FÚ "${kodFu}" není v číselníku`});
 
   let danPlatba = null, danVraceni = null;
-  if (vV) {
-    const r64 = parseFloat(vV.getAttribute('dan_zocelk'));
-    const r65 = parseFloat(vV.getAttribute('odp_zocelk'));
+  if (v6) {
+    const r64 = parseFloat(v6.getAttribute('dan_zocelk'));
+    const r65 = parseFloat(v6.getAttribute('odp_zocelk'));
     if (!isNaN(r64) && r64 > 0) danPlatba  = r64;
     if (!isNaN(r65) && r65 > 0) danVraceni = r65;
   }
@@ -461,7 +463,8 @@ function parseDPHKH1(doc) {
   const vP = doc.querySelector('VetaP');
   const errors = [];
   const dic   = vP?.getAttribute('dic') || '';
-  const kodFu = vD?.getAttribute('c_ufo') || '';
+  const nazev = vP?.getAttribute('zkrobchjm') || vP?.getAttribute('obchodni_firma') || vP?.getAttribute('prijmeni') || '';
+  const kodFu = vP?.getAttribute('c_ufo') || vD?.getAttribute('c_ufo') || '';
   const rok   = vD?.getAttribute('rok') || '';
   const mesic = vD?.getAttribute('mesic') || '';
   const ctvrt = vD?.getAttribute('ctvrt') || '';
@@ -470,7 +473,7 @@ function parseDPHKH1(doc) {
   if (!rok)   errors.push({t:'err', msg:'Chybí rok'});
   return {
     typ:'DPHKH1', typLabel:'Kontrolní hlášení DPH',
-    dic, nazev:'', kodFu, nazevFu: FU[kodFu]?.nazev || kodFu,
+    dic, nazev, kodFu, nazevFu: FU[kodFu]?.nazev || kodFu,
     obdobi: obdobi(rok, mesic, ctvrt), forma:'hlášení',
     danPlatba:null, danVraceni:null, platba:null,
     errors, warnings:[], valid: errors.length===0,
@@ -482,14 +485,15 @@ function parseDPHSHV(doc) {
   const vP = doc.querySelector('VetaP');
   const errors = [];
   const dic   = vP?.getAttribute('dic') || '';
-  const kodFu = vD?.getAttribute('c_ufo') || '';
+  const nazev = vP?.getAttribute('zkrobchjm') || vP?.getAttribute('obchodni_firma') || '';
+  const kodFu = vP?.getAttribute('c_ufo') || vD?.getAttribute('c_ufo') || '';
   const rok   = vD?.getAttribute('rok') || '';
   const mesic = vD?.getAttribute('mesic') || '';
   const ctvrt = vD?.getAttribute('ctvrt') || '';
   if (!dic) errors.push({t:'err', msg:'Chybí DIČ plátce'});
   return {
     typ:'DPHSHV', typLabel:'Souhrnné hlášení VIES',
-    dic, nazev:'', kodFu, nazevFu: FU[kodFu]?.nazev || kodFu,
+    dic, nazev, kodFu, nazevFu: FU[kodFu]?.nazev || kodFu,
     obdobi: obdobi(rok, mesic, ctvrt), forma:'hlášení',
     danPlatba:null, danVraceni:null, platba:null,
     errors, warnings:[], valid: errors.length===0,
