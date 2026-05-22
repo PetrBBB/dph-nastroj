@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DPH Nástroj — Přiznání & Platby</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
+  :root {
+    --primary: #1a3a5c;
+    --primary-hover: #254d78;
+    --bg: #f0f2f5;
+    --surface: #ffffff;
+    --border: #e0e4ea;
+    --border-dashed: #d0d5dd;
+    --text: #1a2332;
+    --text-muted: #6b7a8d;
+    --text-faint: #9aa3ad;
+    --green-bg: #f0f7f0;
+    --green-text: #1a6e35;
+    --red-bg: #fff4f4;
+    --red-text: #a01e1e;
+    --amber-bg: #fff8e6;
+    --amber-border: #f0c040;
+    --amber-text: #7a5500;
+    --step-label-color: #6b7a8d;
+    --card-radius: 12px;
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+
+  /* ── Header ─────────────────────────────────────── */
+  .header-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--card-radius);
+    padding: 1rem 1.5rem;
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .header-firma { font-size: 17px; font-weight: 600; color: var(--primary); margin: 0; }
+  .header-firma-sub { font-size: 12px; color: var(--text-muted); margin: 2px 0 0 0; }
+  .header-app { font-size: 14px; font-weight: 500; color: var(--primary); text-align: right; margin: 0; }
+  .header-ver { font-size: 11px; color: var(--text-faint); text-align: right; margin: 2px 0 0 0; }
+
+  /* ── Layout ──────────────────────────────────────── */
+  .container { max-width: 860px; margin: 0 auto; padding: 28px 20px; }
+
+  .step-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--step-label-color);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    margin-bottom: 8px;
+  }
+
+  /* ── Drop zone ───────────────────────────────────── */
+  .dropzone {
+    border: 2px dashed var(--border-dashed);
+    border-radius: var(--card-radius);
+    padding: 40px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    background: var(--surface);
+    position: relative;
+    margin-bottom: 1.5rem;
+  }
+  .dropzone:hover, .dropzone.drag-over {
+    border-color: var(--primary);
+    background: #f4f7fb;
+  }
+  .dropzone input[type=file] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+  .dropzone-icon { font-size: 32px; margin-bottom: 10px; }
+  .dropzone-title { font-size: 15px; font-weight: 600; color: var(--primary); margin-bottom: 4px; }
+  .dropzone-sub { font-size: 13px; color: var(--text-muted); margin-bottom: 10px; }
+  .dropzone-types { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  .type-badge {
+    font-size: 11px; padding: 3px 10px; border-radius: 20px;
+    background: var(--bg); border: 1px solid var(--border);
+    color: var(--text-muted); font-weight: 500;
+  }
+
+  /* ── Hint box ────────────────────────────────────── */
+  .hint-box {
+    background: var(--amber-bg);
+    border: 1px solid var(--amber-border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 13px;
+    color: var(--amber-text);
+    margin-bottom: 1.5rem;
+    line-height: 1.6;
+  }
+
+  /* ── Locked box ──────────────────────────────────── */
+  .locked-box {
+    background: #f7f8fa;
+    border: 1px dashed var(--border-dashed);
+    border-radius: var(--card-radius);
+    padding: 1.5rem;
+    text-align: center;
+    color: var(--text-faint);
+    font-size: 14px;
+    margin-bottom: 1.5rem;
+  }
+
+  /* ── Success notice ──────────────────────────────── */
+  .success-notice {
+    background: var(--green-bg);
+    border: 1px solid #b2d8b2;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 13px;
+    color: var(--green-text);
+    margin-bottom: 1.5rem;
+  }
+
+  /* ── Stats grid (like app.py) ────────────────────── */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 1.25rem;
+  }
+  @media (max-width: 600px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
+  .stat-card {
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+  }
+  .stat-card.neutral { background: #f7f8fa; }
+  .stat-card.green { background: var(--green-bg); }
+  .stat-card.red { background: var(--red-bg); }
+  .stat-label { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+  .stat-value { font-size: 22px; font-weight: 600; color: var(--primary); }
+  .stat-value.green-val { font-size: 15px; color: var(--green-text); word-break: break-all; }
+  .stat-value.red-val   { font-size: 15px; color: var(--red-text);   word-break: break-all; }
+  .stat-value.small     { font-size: 15px; }
+
+  /* ── Summary table ───────────────────────────────── */
+  .summary-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--card-radius);
+    overflow: hidden;
+    margin-bottom: 1.25rem;
+  }
+  .summary-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px; font-weight: 600; color: var(--primary);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .summary-sub { font-size: 12px; font-weight: 400; color: var(--text-muted); }
+  table.main-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.main-table th {
+    padding: 9px 14px; text-align: left;
+    font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--text-faint);
+    font-weight: 600; border-bottom: 1px solid var(--border);
+    background: #fafbfc;
+  }
+  table.main-table td { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  table.main-table tr:last-child td { border-bottom: none; }
+  table.main-table tfoot td {
+    border-top: 2px solid var(--border);
+    font-weight: 600; font-size: 13px;
+  }
+
+  /* ── Result card ─────────────────────────────────── */
+  .result-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--card-radius);
+    overflow: hidden;
+    margin-bottom: 1.25rem;
+  }
+  .result-header {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  }
+  .result-title { font-size: 14px; font-weight: 600; color: var(--primary); }
+  .result-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+  .result-body { padding: 18px; }
+
+  /* ── Pills ───────────────────────────────────────── */
+  .pill {
+    display: inline-block; padding: 3px 10px;
+    border-radius: 20px; font-size: 11px; font-weight: 600;
+  }
+  .pill-ok  { background: var(--green-bg); color: var(--green-text); }
+  .pill-err { background: var(--red-bg);   color: var(--red-text); }
+  .pill-warn{ background: var(--amber-bg); color: var(--amber-text); }
+  .pill-pay { background: #eaf1fa; color: var(--primary); }
+  .pill-ret { background: var(--amber-bg); color: var(--amber-text); }
+
+  /* ── Data fields ─────────────────────────────────── */
+  .data-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 1px; background: var(--border);
+    border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+    margin-bottom: 14px;
+  }
+  @media (max-width: 500px) { .data-grid { grid-template-columns: 1fr; } }
+  .data-cell { background: var(--surface); padding: 11px 14px; }
+  .data-cell.span2 { grid-column: span 2; }
+  .data-lbl { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 3px; }
+  .data-val { font-size: 14px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+  .data-val.big { font-size: 22px; color: var(--primary); }
+  .data-val.green { font-size: 22px; color: var(--green-text); }
+  .data-val.normal { font-weight: 400; }
+
+  /* ── Payment section ─────────────────────────────── */
+  .payment-grid {
+    display: grid; grid-template-columns: 1fr auto;
+    gap: 24px; align-items: start;
+  }
+  @media (max-width: 560px) { .payment-grid { grid-template-columns: 1fr; } }
+  .pay-field { margin-bottom: 12px; }
+  .pay-label { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+  .pay-row {
+    display: flex; align-items: center; justify-content: space-between;
+    background: #f7f8fa; border: 1px solid var(--border);
+    border-radius: 7px; padding: 9px 12px; gap: 8px;
+    font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums;
+  }
+  .copy-btn {
+    background: none; border: none; cursor: pointer;
+    font-size: 13px; color: var(--text-muted); padding: 0;
+    opacity: 0.55; transition: opacity 0.15s; flex-shrink: 0;
+  }
+  .copy-btn:hover { opacity: 1; }
+  .amount-big { font-size: 26px; font-weight: 700; color: var(--primary); margin-bottom: 14px; }
+
+  /* ── QR ──────────────────────────────────────────── */
+  .qr-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .qr-wrap canvas, .qr-wrap img { border: 1px solid var(--border); border-radius: 8px; display: block; }
+  .qr-note { font-size: 11px; color: var(--text-muted); text-align: center; max-width: 140px; }
+
+  /* ── Tabs ────────────────────────────────────────── */
+  .tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+  .tab-btn {
+    padding: 9px 14px; font-size: 13px; font-weight: 500;
+    border: none; background: none; cursor: pointer;
+    color: var(--text-muted); border-bottom: 2px solid transparent;
+    margin-bottom: -1px; transition: all 0.15s;
+  }
+  .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; }
+
+  /* ── Error list ──────────────────────────────────── */
+  .err-list { display: flex; flex-direction: column; gap: 8px; }
+  .err-item {
+    padding: 9px 13px; border-radius: 7px;
+    font-size: 13px; display: flex; gap: 8px; align-items: flex-start;
+  }
+  .err-item.err  { background: var(--red-bg);   color: var(--red-text); }
+  .err-item.warn { background: var(--amber-bg);  color: var(--amber-text); }
+
+  /* ── Download button ─────────────────────────────── */
+  .btn-download {
+    background: var(--primary); color: white;
+    border: none; border-radius: 8px;
+    padding: 11px 20px; font-size: 14px; font-weight: 600;
+    cursor: pointer; width: 100%;
+    transition: background 0.15s;
+    margin-top: 4px;
+  }
+  .btn-download:hover { background: var(--primary-hover); }
+
+  /* ── Toast ───────────────────────────────────────── */
+  .toast {
+    position: fixed; bottom: 24px; right: 24px;
+    background: var(--text); color: white;
+    padding: 10px 16px; border-radius: 8px;
+    font-size: 13px; opacity: 0;
+    transition: opacity 0.2s; pointer-events: none; z-index: 999;
+  }
+  .toast.show { opacity: 1; }
+
+  hr.section-divider { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <div class="header-box">
+    <div>
+      <p class="header-firma">Účetnictví BP s.r.o.</p>
+      <p class="header-firma-sub">www.ucto-bures.cz</p>
+    </div>
+    <div>
+      <p class="header-app">XML přiznání DPH → Platby</p>
+      <p class="header-ver">v1.0 · DPHDP3 · DPHKH1 · DPHSHV</p>
+    </div>
+  </div>
+
+  <!-- Krok 1: Upload -->
+  <p class="step-label">Krok 1 — Nahrání XML souborů</p>
+
+  <div class="dropzone" id="dropzone">
+    <input type="file" id="fileInput" accept=".xml" multiple>
+    <div class="dropzone-icon">📂</div>
+    <div class="dropzone-title">Přetáhněte XML soubory nebo klikněte pro výběr</div>
+    <div class="dropzone-sub">Podporuje více souborů najednou</div>
+    <div class="dropzone-types">
+      <span class="type-badge">DPHDP3 — Přiznání k DPH</span>
+      <span class="type-badge">DPHKH1 — Kontrolní hlášení</span>
+      <span class="type-badge">DPHSHV — Souhrnné hlášení</span>
+    </div>
+  </div>
+
+  <div class="hint-box">
+    ⚠️ <strong>Zpracování probíhá lokálně ve vašem prohlížeči.</strong> Žádná data se neposílají na server — soubory zůstávají pouze u vás.
+  </div>
+
+  <!-- Výsledky -->
+  <div id="results"></div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+// ── Číselník FÚ ───────────────────────────────────────────────────────────
+const FU = {
+  '451': { nazev: 'FÚ pro hl. m. Prahu',         matrika: '77628031' },
+  '452': { nazev: 'FÚ pro Středočeský kraj',      matrika: '77628111' },
+  '453': { nazev: 'FÚ pro Jihočeský kraj',        matrika: '77627231' },
+  '454': { nazev: 'FÚ pro Plzeňský kraj',         matrika: '77627311' },
+  '455': { nazev: 'FÚ pro Karlovarský kraj',      matrika: '77629341' },
+  '456': { nazev: 'FÚ pro Ústecký kraj',          matrika: '77621411' },
+  '457': { nazev: 'FÚ pro Liberecký kraj',        matrika: '77628461' },
+  '458': { nazev: 'FÚ pro Královéhradecký kraj',  matrika: '77626511' },
+  '459': { nazev: 'FÚ pro Pardubický kraj',       matrika: '77622561' },
+  '460': { nazev: 'FÚ pro Kraj Vysočina',         matrika: '67626681' },
+  '461': { nazev: 'FÚ pro Jihomoravský kraj',     matrika: '77628621' },
+  '462': { nazev: 'FÚ pro Olomoucký kraj',        matrika: '47623811' },
+  '463': { nazev: 'FÚ pro Moravskoslezský kraj',  matrika: '77621761' },
+  '464': { nazev: 'FÚ pro Zlínský kraj',          matrika: '47620661' },
+  '480': { nazev: 'Specializovaný FÚ',            matrika: '77628031' },
+};
+
+function buildIBAN(predcisli, matrika, kodBanky) {
+  const bankNum  = kodBanky.padStart(4,'0');
+  const prefNum  = predcisli.padStart(6,'0');
+  const acctNum  = matrika.padStart(10,'0');
+  const numStr   = bankNum + prefNum + acctNum;
+  const fullNum  = numStr + '1235' + '00';   // C=12, Z=35
+  const mod      = BigInt(fullNum) % 97n;
+  const check    = String(98n - mod).padStart(2,'0');
+  return `CZ${check}${bankNum}${prefNum}${acctNum}`;
+}
+
+function fmtMoney(n) {
+  return new Intl.NumberFormat('cs-CZ', {minimumFractionDigits:2, maximumFractionDigits:2}).format(n) + ' Kč';
+}
+
+function datumSplatnosti(rok, mesic, ctvrt) {
+  let endM, endY;
+  if (mesic)       { endM = parseInt(mesic);       endY = parseInt(rok); }
+  else if (ctvrt)  { endM = parseInt(ctvrt) * 3;   endY = parseInt(rok); }
+  else return null;
+  let m = endM + 1, y = endY;
+  if (m > 12) { m = 1; y++; }
+  let d = new Date(y, m-1, 25);
+  if (d.getDay() === 6) d.setDate(27);
+  if (d.getDay() === 0) d.setDate(d.getDate()+1);
+  return d.toLocaleDateString('cs-CZ');
+}
+
+function obdobi(rok, mesic, ctvrt) {
+  if (mesic) return `${parseInt(mesic).toString().padStart(2,'0')}/${rok}`;
+  if (ctvrt) return `Q${ctvrt}/${rok}`;
+  return rok || '—';
+}
+
+// ── XML Parser ────────────────────────────────────────────────────────────
+function parseXML(xmlStr) {
+  const doc = new DOMParser().parseFromString(xmlStr, 'application/xml');
+  if (doc.querySelector('parsererror')) throw new Error('Neplatný XML soubor');
+  const dp3 = doc.querySelector('DPHDP3');
+  if (dp3) return parseDPHDP3(doc);
+  const kh1 = doc.querySelector('DPHKH1');
+  if (kh1) return parseDPHKH1(doc);
+  const shv = doc.querySelector('DPHSHV');
+  if (shv) return parseDPHSHV(doc);
+  throw new Error('Nepodporovaný typ XML. Podporovány: DPHDP3, DPHKH1, DPHSHV.');
+}
+
+function parseDPHDP3(doc) {
+  const vD = doc.querySelector('VetaD');
+  const vP = doc.querySelector('VetaP');
+  const vV = doc.querySelector('VetaV');
+  const errors = [], warnings = [];
+
+  const dic    = vP?.getAttribute('dic') || vP?.getAttribute('c_dph') || '';
+  const nazev  = vP?.getAttribute('naz_subjektu') || vP?.getAttribute('obchodni_firma') || vP?.getAttribute('prijmeni') || '';
+  const kodFu  = vD?.getAttribute('c_ufo') || '';
+  const rok    = vD?.getAttribute('rok') || '';
+  const mesic  = vD?.getAttribute('mesic') || '';
+  const ctvrt  = vD?.getAttribute('ctvrt') || '';
+  const forma  = vD?.getAttribute('dapdph_forma') || '';
+
+  if (!dic)    errors.push({t:'err', msg:'Chybí DIČ plátce (atribut dic)'});
+  if (!kodFu)  errors.push({t:'err', msg:'Chybí kód finančního úřadu (c_ufo)'});
+  if (!rok)    errors.push({t:'err', msg:'Chybí rok zdaňovacího období'});
+  if (!mesic && !ctvrt) errors.push({t:'err', msg:'Chybí měsíc nebo čtvrtletí zdaňovacího období'});
+  if (!['B','O','D','E'].includes(forma)) warnings.push({t:'warn', msg:`Neočekávaná hodnota dapdph_forma="${forma}" (očekáváno B/O/D/E)`});
+  if (kodFu && !FU[kodFu]) errors.push({t:'err', msg:`Kód FÚ "${kodFu}" není v číselníku`});
+
+  let danPlatba = null, danVraceni = null;
+  if (vV) {
+    const r64 = parseFloat(vV.getAttribute('dan_zocelk'));
+    const r65 = parseFloat(vV.getAttribute('odp_zocelk'));
+    if (!isNaN(r64) && r64 > 0) danPlatba  = r64;
+    if (!isNaN(r65) && r65 > 0) danVraceni = r65;
+  }
+
+  let platba = null;
+  if (danPlatba !== null && errors.length === 0 && FU[kodFu]) {
+    const mat  = FU[kodFu].matrika;
+    const iban = buildIBAN('705', mat, '0710');
+    const vs   = dic.replace(/^CZ/i, '');
+    const slat = datumSplatnosti(rok, mesic, ctvrt);
+    const zprav = (nazev || dic).substring(0,50).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
+    platba = { iban, castka: danPlatba, vs, ucet: `705-${mat}/0710`, splatnost: slat, zprava: zprav };
+  }
+
+  return {
+    typ:'DPHDP3', typLabel:'Přiznání k DPH',
+    dic, nazev, kodFu, nazevFu: FU[kodFu]?.nazev || kodFu,
+    obdobi: obdobi(rok, mesic, ctvrt),
+    forma: {B:'řádné',O:'opravné',D:'dodatečné',E:'dodatečné/opravné'}[forma] || forma,
+    danPlatba, danVraceni, platba, errors, warnings, valid: errors.length===0,
+  };
+}
+
+function parseDPHKH1(doc) {
+  const vD = doc.querySelector('VetaD');
+  const vP = doc.querySelector('VetaP');
+  const errors = [];
+  const dic   = vP?.getAttribute('dic') || '';
+  const kodFu = vD?.getAttribute('c_ufo') || '';
+  const rok   = vD?.getAttribute('rok') || '';
+  const mesic = vD?.getAttribute('mesic') || '';
+  const ctvrt = vD?.getAttribute('ctvrt') || '';
+  if (!dic)   errors.push({t:'err', msg:'Chybí DIČ plátce'});
+  if (!kodFu) errors.push({t:'err', msg:'Chybí kód finančního úřadu'});
+  if (!rok)   errors.push({t:'err', msg:'Chybí rok'});
+  return {
+    typ:'DPHKH1', typLabel:'Kontrolní hlášení DPH',
+    dic, nazev:'', kodFu, nazevFu: FU[kodFu]?.nazev || kodFu,
+    obdobi: obdobi(rok, mesic, ctvrt), forma:'hlášení',
+    danPlatba:null, danVraceni:null, platba:null,
+    errors, warnings:[], valid: errors.length===0,
+  };
+}
+
+function parseDPHSHV(doc) {
+  const vD = doc.querySelector('VetaD');
+  const vP = doc.querySelector('VetaP');
+  const errors = [];
+  const dic   = vP?.getAttribute('dic') || '';
+  const kodFu = vD?.getAttribute('c_ufo') || '';
+  const rok   = vD?.getAttribute('rok') || '';
+  const mesic = vD?.getAttribute('mesic') || '';
+  const ctvrt = vD?.getAttribute('ctvrt') || '';
+  if (!dic) errors.push({t:'err', msg:'Chybí DIČ plátce'});
+  return {
+    typ:'DPHSHV', typLabel:'Souhrnné hlášení VIES',
+    dic, nazev:'', kodFu, nazevFu: FU[kodFu]?.nazev || kodFu,
+    obdobi: obdobi(rok, mesic, ctvrt), forma:'hlášení',
+    danPlatba:null, danVraceni:null, platba:null,
+    errors, warnings:[], valid: errors.length===0,
+  };
+}
+
+// ── QR SPAYD ──────────────────────────────────────────────────────────────
+function buildQR(p) {
+  return ['SPD*1.0', `ACC:${p.iban}`, `AM:${p.castka.toFixed(2)}`, 'CC:CZK', `X-VS:${p.vs}`, `MSG:DPH ${p.zprava}`].join('*');
+}
+
+// ── Render ────────────────────────────────────────────────────────────────
+let _qrRefs = [];
+
+function renderAll(items) {
+  _qrRefs.forEach(q => { try { q.clear(); } catch(e){} });
+  _qrRefs = [];
+  const el = document.getElementById('results');
+  if (!items.length) { el.innerHTML = ''; return; }
+
+  let html = '';
+
+  // Step 2 label
+  html += `<p class="step-label">Krok 2 — Výsledky zpracování</p>`;
+
+  // Summary stats
+  const total     = items.length;
+  const okCount   = items.filter(i => i.valid).length;
+  const errCount  = items.filter(i => !i.valid).length;
+  const platbaSum = items.filter(i => i.platba).reduce((s,i) => s + i.platba.castka, 0);
+
+  html += `<div class="stats-grid">
+    <div class="stat-card neutral"><div class="stat-label">Souborů</div><div class="stat-value">${total}</div></div>
+    <div class="stat-card ${okCount===total?'green':'neutral'}"><div class="stat-label">Validní</div><div class="stat-value">${okCount}</div></div>
+    <div class="stat-card ${errCount>0?'red':'neutral'}"><div class="stat-label">Chyby</div><div class="stat-value">${errCount}</div></div>
+    <div class="stat-card ${platbaSum>0?'neutral':'neutral'}"><div class="stat-label">K úhradě celkem</div><div class="stat-value small">${platbaSum>0 ? fmtMoney(platbaSum) : '—'}</div></div>
+  </div>`;
+
+  // Table overview if >1
+  if (items.length > 1) {
+    html += `<div class="summary-card"><div class="summary-header">Přehled souborů <span class="summary-sub">${items.length} souborů</span></div>
+      <table class="main-table"><thead><tr>
+        <th>Typ podání</th><th>DIČ</th><th>Období</th><th>Stav</th><th>Výsledek</th>
+      </tr></thead><tbody>`;
+    items.forEach(item => {
+      html += `<tr>
+        <td>${item.typLabel}</td>
+        <td style="font-variant-numeric:tabular-nums">${item.dic||'—'}</td>
+        <td style="font-variant-numeric:tabular-nums">${item.obdobi}</td>
+        <td>${item.valid ? '<span class="pill pill-ok">✓ OK</span>' : `<span class="pill pill-err">${item.errors.length} chyb</span>`}</td>
+        <td>${item.platba ? `<span class="pill pill-pay">${fmtMoney(item.platba.castka)}</span>` : item.danVraceni ? `<span class="pill pill-ret">Nadměrný odpočet</span>` : '<span style="color:var(--text-faint)">—</span>'}</td>
+      </tr>`;
+    });
+    if (platbaSum > 0) {
+      html += `<tfoot><tr><td colspan="4" style="text-align:right">Celkem k úhradě:</td><td><strong>${fmtMoney(platbaSum)}</strong></td></tr></tfoot>`;
+    }
+    html += `</tbody></table></div>`;
+  }
+
+  // Individual cards
+  items.forEach((item, idx) => {
+    const statusBadge = item.errors.length
+      ? `<span class="pill pill-err">${item.errors.length} ${item.errors.length===1?'chyba':'chyb'}</span>`
+      : item.warnings.length
+      ? `<span class="pill pill-warn">${item.warnings.length} varování</span>`
+      : `<span class="pill pill-ok">✓ Validace OK</span>`;
+
+    const hasPlatba = !!item.platba;
+    const hasIssues = item.errors.length > 0 || item.warnings.length > 0;
+
+    let tabs = '';
+    if (hasPlatba && hasIssues) {
+      tabs = `<div class="tabs">
+        <button class="tab-btn active" onclick="switchTab(${idx},'info',this)">Přehled</button>
+        <button class="tab-btn" onclick="switchTab(${idx},'platba',this)">Platební instrukce</button>
+        <button class="tab-btn" onclick="switchTab(${idx},'chyby',this)">Chyby / varování</button>
+      </div>`;
+    } else if (hasPlatba) {
+      tabs = `<div class="tabs">
+        <button class="tab-btn active" onclick="switchTab(${idx},'info',this)">Přehled</button>
+        <button class="tab-btn" onclick="switchTab(${idx},'platba',this)">Platební instrukce</button>
+      </div>`;
+    } else if (hasIssues) {
+      tabs = `<div class="tabs">
+        <button class="tab-btn active" onclick="switchTab(${idx},'info',this)">Přehled</button>
+        <button class="tab-btn" onclick="switchTab(${idx},'chyby',this)">Chyby / varování</button>
+      </div>`;
+    }
+
+    html += `<div class="result-card">
+      <div class="result-header">
+        <div>
+          <div class="result-title">${item.typLabel}</div>
+          <div class="result-sub">${item.dic}${item.nazev ? ' · ' + item.nazev : ''}${item.nazevFu ? ' · ' + item.nazevFu : ''}</div>
+        </div>
+        ${statusBadge}
+      </div>
+      <div class="result-body">
+        ${tabs}
+
+        <div class="tab-pane active" id="tp-${idx}-info">
+          <div class="data-grid">
+            <div class="data-cell"><div class="data-lbl">DIČ</div><div class="data-val">${item.dic||'—'}</div></div>
+            <div class="data-cell"><div class="data-lbl">Zdaňovací období</div><div class="data-val">${item.obdobi}</div></div>
+            <div class="data-cell"><div class="data-lbl">Finanční úřad</div><div class="data-val normal" style="font-size:13px">${item.nazevFu||'—'}</div></div>
+            <div class="data-cell"><div class="data-lbl">Typ podání</div><div class="data-val normal">${item.forma||'—'}</div></div>
+            ${item.danPlatba!==null ? `<div class="data-cell span2"><div class="data-lbl">Daňová povinnost (k úhradě)</div><div class="data-val big">${fmtMoney(item.danPlatba)}</div></div>` : ''}
+            ${item.danVraceni!==null ? `<div class="data-cell span2"><div class="data-lbl">Nadměrný odpočet (k vrácení)</div><div class="data-val green">${fmtMoney(item.danVraceni)}</div></div>` : ''}
+            ${item.danPlatba===null && item.danVraceni===null && item.typ==='DPHDP3' ? `<div class="data-cell span2"><div class="data-lbl">Výsledek</div><div class="data-val normal" style="color:var(--text-muted)">Nulové přiznání nebo výsledek nebyl v XML nalezen</div></div>` : ''}
+          </div>
+        </div>`;
+
+    if (hasPlatba) {
+      const p = item.platba;
+      html += `<div class="tab-pane" id="tp-${idx}-platba">
+        <div class="payment-grid">
+          <div>
+            <div class="amount-big">${new Intl.NumberFormat('cs-CZ',{minimumFractionDigits:2}).format(p.castka)} <span style="font-size:16px;font-weight:400;color:var(--text-muted)">Kč</span></div>
+            <div class="pay-field">
+              <div class="pay-label">Číslo účtu</div>
+              <div class="pay-row"><span>${p.ucet}</span><button class="copy-btn" onclick="cp('${p.ucet}')">📋</button></div>
+            </div>
+            <div class="pay-field">
+              <div class="pay-label">IBAN</div>
+              <div class="pay-row"><span>${p.iban}</span><button class="copy-btn" onclick="cp('${p.iban}')">📋</button></div>
+            </div>
+            <div class="pay-field">
+              <div class="pay-label">Variabilní symbol</div>
+              <div class="pay-row"><span>${p.vs}</span><button class="copy-btn" onclick="cp('${p.vs}')">📋</button></div>
+            </div>
+            <div class="pay-field">
+              <div class="pay-label">Datum splatnosti</div>
+              <div class="pay-row"><span>${p.splatnost||'—'}</span></div>
+            </div>
+          </div>
+          <div class="qr-wrap">
+            <div class="pay-label" style="text-align:center">QR platba</div>
+            <div id="qr-${idx}"></div>
+            <div class="qr-note">Naskenujte v mobilním bankovnictví</div>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    if (hasIssues) {
+      html += `<div class="tab-pane" id="tp-${idx}-chyby">
+        <div class="err-list">
+          ${item.errors.map(e  => `<div class="err-item err"><span>✕</span><span>${e.msg}</span></div>`).join('')}
+          ${item.warnings.map(w => `<div class="err-item warn"><span>⚠</span><span>${w.msg}</span></div>`).join('')}
+        </div>
+      </div>`;
+    }
+
+    html += `</div></div>`;  // result-body + result-card
+  });
+
+  // Krok 3: export
+  const exportItems = items.filter(i => i.platba);
+  if (exportItems.length > 0) {
+    html += `<hr class="section-divider">
+      <p class="step-label">Krok 3 — Export platebních instrukcí</p>
+      <button class="btn-download" onclick="exportCSV()">⬇&nbsp;&nbsp;Stáhnout přehled plateb (CSV)</button>`;
+  }
+
+  el.innerHTML = html;
+
+  // Generate QR codes
+  items.forEach((item, idx) => {
+    if (!item.platba) return;
+    const qrEl = document.getElementById(`qr-${idx}`);
+    if (!qrEl) return;
+    try {
+      const qr = new QRCode(qrEl, {
+        text: buildQR(item.platba),
+        width: 156, height: 156,
+        colorDark: '#1a2332', colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M,
+      });
+      _qrRefs.push(qr);
+    } catch(e) {
+      qrEl.innerHTML = '<div style="font-size:11px;color:var(--text-muted);padding:8px">QR nelze vygenerovat</div>';
+    }
+  });
+}
+
+function switchTab(idx, name, btn) {
+  const body = btn.closest('.result-body');
+  body.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  body.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById(`tp-${idx}-${name}`)?.classList.add('active');
+}
+
+function cp(text) {
+  navigator.clipboard.writeText(text).then(() => toast('Zkopírováno')).catch(() => toast('Kopírování selhalo'));
+}
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 1800);
+}
+
+let _items = [];
+
+function exportCSV() {
+  const rows = [['DIČ','Typ podání','Období','Číslo účtu','IBAN','Variabilní symbol','Částka (Kč)','Splatnost']];
+  _items.filter(i => i.platba).forEach(i => {
+    const p = i.platba;
+    rows.push([i.dic, i.typLabel, i.obdobi, p.ucet, p.iban, p.vs, p.castka.toFixed(2).replace('.',','), p.splatnost||'']);
+  });
+  const csv = '\ufeff' + rows.map(r => r.map(c => `"${c}"`).join(';')).join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = `dph_platby_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+// ── File handling ─────────────────────────────────────────────────────────
+async function processFiles(files) {
+  const items = [];
+  for (const f of files) {
+    try {
+      const text = await f.text();
+      const r = parseXML(text);
+      r.filename = f.name;
+      items.push(r);
+    } catch(e) {
+      items.push({
+        typ:'ERROR', typLabel: f.name, dic:'', nazev:'', kodFu:'', nazevFu:'',
+        obdobi:'—', forma:'—', danPlatba:null, danVraceni:null, platba:null,
+        errors:[{t:'err', msg:e.message}], warnings:[], valid:false, filename:f.name,
+      });
+    }
+  }
+  _items = items;
+  renderAll(items);
+}
+
+const dz = document.getElementById('dropzone');
+const fi = document.getElementById('fileInput');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('drag-over');
+  processFiles(Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith('.xml')));
+});
+fi.addEventListener('change', e => { processFiles(Array.from(e.target.files)); fi.value=''; });
+</script>
+</body>
+</html>
