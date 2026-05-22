@@ -538,7 +538,7 @@ function parseDPHDP3(doc) {
   // Vzájemná exkluzivita dano_da a dan_vrac — nemohou být obě > 0
   if (v6) {
     const daDa   = parseFloat(v6.getAttribute('dano_da') || 0);
-    const daVrac = parseFloat(v6.getAttribute('dan_vrac') || 0);
+    const daVrac = parseFloat(v6.getAttribute('dan_vrac') || 0) || parseFloat(v6.getAttribute('dano_no') || 0);
     if (daDa > 0 && daVrac > 0) {
       errors.push({t:'err', msg:`Ř.64 (daňová povinnost ${Math.round(daDa).toLocaleString('cs-CZ')} Kč) i ř.65 (nadměrný odpočet ${Math.round(daVrac).toLocaleString('cs-CZ')} Kč) jsou zároveň kladné — jeden z nich musí být nulový`});
     }
@@ -547,10 +547,10 @@ function parseDPHDP3(doc) {
   let danPlatba = null, danVraceni = null;
   if (v6) {
     // dano_da = výsledná daňová povinnost k úhradě (řádek 64 tiskopisu)
-    // dan_vrac = nadměrný odpočet k vrácení FÚ (řádek 65 tiskopisu)
-    // Vždy platí jen jeden z nich — buď platba, nebo vrácení, nebo nula
+    // dan_vrac / dano_no = nadměrný odpočet k vrácení FÚ (řádek 65)
+    // ABRA Flexi používá buď dan_vrac nebo dano_no dle verze exportu
     const platba  = parseFloat(v6.getAttribute('dano_da'));
-    const vraceni = parseFloat(v6.getAttribute('dan_vrac'));
+    const vraceni = parseFloat(v6.getAttribute('dan_vrac') || 0) || parseFloat(v6.getAttribute('dano_no') || 0);
     if (!isNaN(platba)  && platba  > 0) danPlatba  = platba;
     if (!isNaN(vraceni) && vraceni > 0) danVraceni = vraceni;
   }
