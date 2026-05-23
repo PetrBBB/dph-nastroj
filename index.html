@@ -321,7 +321,7 @@
     </div>
     <div>
       <p class="header-app">XML přiznání DPH → Platby</p>
-      <p class="header-ver">v1.16 · DPHDP3 · DPHKH1 · DPHSHV · Flexi XML</p>
+      <p class="header-ver">v1.17 · DPHDP3 · DPHKH1 · DPHSHV · Flexi XML</p>
     </div>
   </div>
 
@@ -661,7 +661,7 @@ function parseDPHKH1(doc) {
     const evid    = el.getAttribute('c_evid_dd') || '?';
     const r       = el.getAttribute('c_radku') || '?';
     const kodSt   = el.getAttribute('k_stat') || '';
-    const vatId   = el.getAttribute('dic_dod') || '';
+    const vatId   = el.getAttribute('vatid_dod') || el.getAttribute('dic_dod') || '';
     const dppd    = el.getAttribute('dppd') || '';
     const zaklD1  = el.getAttribute('zakl_dane1') || '';
     if (!dppd)   errors.push({t:'err', msg:`A.2 řádek ${r} (${evid}): chybí datum povinnosti přiznat daň (DPPD)`});
