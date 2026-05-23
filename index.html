@@ -321,7 +321,7 @@
     </div>
     <div>
       <p class="header-app">XML přiznání DPH → Platby</p>
-      <p class="header-ver">v1.20 · DPHDP3 · DPHKH1 · DPHSHV · Flexi XML</p>
+      <p class="header-ver">v1.21 · DPHDP3 · DPHKH1 · DPHSHV · Flexi XML</p>
     </div>
   </div>
 
@@ -825,36 +825,16 @@ function renderAll(items) {
   const dpItems  = items.filter(i => i.typ === 'DPHDP3');
   const khItems  = items.filter(i => i.typ === 'DPHKH1');
   const shvItems = items.filter(i => i.typ === 'DPHSHV');
+
   const parovani = [];
   for (const kh of khItems) {
     const dp = dpItems.find(d => d.dic === kh.dic && d.obdobi === kh.obdobi);
     if (dp) parovani.push({ kh, dp });
   }
-
-  // Párování SH ↔ DP
   const shvParovani = [];
   for (const shv of shvItems) {
     const dp = dpItems.find(d => d.dic === shv.dic && d.obdobi === shv.obdobi);
     if (dp) shvParovani.push({ shv, dp });
-  }
-
-  // Upozornění na chybějící SH: DP má ř.20/21 a SH chybí
-  for (const dp of dpItems) {
-    const v2 = dp._doc?.querySelector('Veta2');
-    const dpSluzby  = parseFloat(v2?.getAttribute('pln_sluzby')  || 0);
-    const dpZbozi   = parseFloat(v2?.getAttribute('dod_zb')      || 0); // ř.20 dodání zboží do JČS §64
-    const dpTrojstr = parseFloat(v2?.getAttribute('pln_trojstr') || 0);
-    const dpZaslani = 0; // ř.24 zasílání — do SH nepatří
-    const dpCelkem  = dpSluzby + dpZbozi + dpTrojstr;
-    const maSH = shvItems.some(s => s.dic === dp.dic && s.obdobi === dp.obdobi);
-    if (!maSH && dpCelkem > 0) {
-      const casti = [
-        dpZbozi   > 0 ? `zboží §64: ${fmtMoney(dpZbozi)}`       : '',
-        dpSluzby  > 0 ? `služby §102: ${fmtMoney(dpSluzby)}`     : '',
-        dpTrojstr > 0 ? `třístranný §17: ${fmtMoney(dpTrojstr)}` : '',
-      ].filter(Boolean).join(', ');
-      dp.warnings.push({t:'warn', msg:`Chybí souhrnné hlášení (VIES): DP obsahuje plnění do JČS (${casti}) — nahrajte soubor SH`});
-    }
   }
 
   html += `<p class="step-label">Krok 1 — Párová kontrola KH ↔ Přiznání</p>`;
@@ -1235,6 +1215,26 @@ async function processFiles(files) {
       });
     }
   }
+  // Upozornění na chybějící SH — přidáme do warnings před renderováním
+  const _dpItems  = items.filter(i => i.typ === 'DPHDP3');
+  const _shvItems = items.filter(i => i.typ === 'DPHSHV');
+  for (const dp of _dpItems) {
+    const v2 = dp._doc?.querySelector('Veta2');
+    const dpSluzby  = parseFloat(v2?.getAttribute('pln_sluzby')  || 0);
+    const dpZbozi   = parseFloat(v2?.getAttribute('dod_zb')      || 0);
+    const dpTrojstr = parseFloat(v2?.getAttribute('pln_trojstr') || 0);
+    const dpCelkem  = dpSluzby + dpZbozi + dpTrojstr;
+    const maSH = _shvItems.some(s => s.dic === dp.dic && s.obdobi === dp.obdobi);
+    if (!maSH && dpCelkem > 0) {
+      const casti = [
+        dpZbozi   > 0 ? `zboží §64: ${fmtMoney(dpZbozi)}`       : '',
+        dpSluzby  > 0 ? `služby §102: ${fmtMoney(dpSluzby)}`     : '',
+        dpTrojstr > 0 ? `třístranný §17: ${fmtMoney(dpTrojstr)}` : '',
+      ].filter(Boolean).join(', ');
+      dp.warnings.push({t:'warn', msg:`Chybí souhrnné hlášení (VIES): DP obsahuje plnění do JČS (${casti}) — nahrajte soubor SH`});
+    }
+  }
+
   _items = items;
   renderAll(items);
 }
