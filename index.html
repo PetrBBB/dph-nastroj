@@ -307,7 +307,13 @@
   }
   .btn-gmail:hover { background: var(--primary-hover); }
 
-  hr.section-divider { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
+  .warn-banner {
+    background: #fff3cd; border: 2px solid #f59e0b;
+    border-radius: 10px; padding: 14px 18px;
+    font-size: 14px; font-weight: 500; color: #92400e;
+    margin-bottom: 1rem;
+  }
+  .warn-banner strong { color: #78350f; }
 </style>
 </head>
 <body>
@@ -321,7 +327,7 @@
     </div>
     <div>
       <p class="header-app">XML přiznání DPH → Platby</p>
-      <p class="header-ver">v1.21 · DPHDP3 · DPHKH1 · DPHSHV · Flexi XML</p>
+      <p class="header-ver">v1.22 · DPHDP3 · DPHKH1 · DPHSHV · Flexi XML</p>
     </div>
   </div>
 
@@ -838,6 +844,16 @@ function renderAll(items) {
   }
 
   html += `<p class="step-label">Krok 1 — Párová kontrola KH ↔ Přiznání</p>`;
+
+  // Velké upozornění na chybějící SH — zobrazíme před Krokem 1
+  for (const dp of dpItems) {
+    const shWarn = dp.warnings.find(w => w.msg.includes('Chybí souhrnné hlášení'));
+    if (shWarn) {
+      html += `<div class="warn-banner">
+        ⚠️ <strong>${dp.nazev || dp.dic}</strong> — ${shWarn.msg}
+      </div>`;
+    }
+  }
 
   if (parovani.length === 0) {
     html += `<div class="hint-box">Nebyl nalezen žádný pár KH + Přiznání se stejným DIČ a obdobím. Nahrajte oba soubory najednou pro křížovou kontrolu součtů.</div>`;
