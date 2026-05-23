@@ -321,7 +321,7 @@
     </div>
     <div>
       <p class="header-app">XML přiznání DPH → Platby</p>
-      <p class="header-ver">v1.17 · DPHDP3 · DPHKH1 · DPHSHV · Flexi XML</p>
+      <p class="header-ver">v1.18 · DPHDP3 · DPHKH1 · DPHSHV · Flexi XML</p>
     </div>
   </div>
 
@@ -766,22 +766,44 @@ function parseDPHKH1(doc) {
 function parseDPHSHV(doc) {
   const vD = doc.querySelector('VetaD');
   const vP = doc.querySelector('VetaP');
-  const errors = [];
+  const errors = [], warnings = [];
   const dic   = vP?.getAttribute('dic') || '';
   const nazev = vP?.getAttribute('zkrobchjm') || vP?.getAttribute('obchodni_firma') || '';
   const kodFu = vP?.getAttribute('c_ufo') || vD?.getAttribute('c_ufo') || '';
   const rok   = vD?.getAttribute('rok') || '';
   const mesic = vD?.getAttribute('mesic') || '';
   const ctvrt = vD?.getAttribute('ctvrt') || '';
-  if (!dic) errors.push({t:'err', msg:'Chybí DIČ plátce'});
+  const forma = vD?.getAttribute('shvies_forma') || '';
+
+  if (!dic)   errors.push({t:'err', msg:'Chybí DIČ plátce'});
+  if (!kodFu) errors.push({t:'err', msg:'Chybí kód finančního úřadu (c_ufo)'});
+  if (!rok)   errors.push({t:'err', msg:'Chybí rok zdaňovacího období'});
+  if (!['R','O','N'].includes(forma)) warnings.push({t:'warn', msg:`Neočekávaná hodnota shvies_forma="${forma}" (očekáváno R=řádné, O=opravné, N=následné)`});
+
+  // Spočítáme součty po typech plnění pro křížovou kontrolu s DP
+  let sumZbozi = 0, sumSluzby = 0, sumTrojstr = 0;
+  doc.querySelectorAll('VetaR').forEach(el => {
+    const kPln    = el.getAttribute('k_pln_eu') || '';
+    const hodnota = parseFloat(el.getAttribute('pln_hodnota') || 0);
+    const cVat    = el.getAttribute('c_vat') || '';
+    const kStat   = el.getAttribute('k_stat') || '';
+    if (!cVat)   errors.push({t:'err', msg:`SH řádek ${el.getAttribute('c_rad')||'?'}: chybí VAT ID odběratele`});
+    if (!kStat)  errors.push({t:'err', msg:`SH řádek ${el.getAttribute('c_rad')||'?'}: chybí kód státu`});
+    if (kPln === '0') sumZbozi   += hodnota;
+    else if (kPln === '2') sumTrojstr += hodnota;
+    else if (kPln === '3') sumSluzby  += hodnota;
+  });
+
   return {
     typ:'DPHSHV', typLabel:'Souhrnné hlášení VIES',
     dic, nazev, kodFu, nazevFu: FU[kodFu]?.nazev || kodFu,
-    obdobi: obdobi(rok, mesic, ctvrt), forma:'hlášení',
+    obdobi: obdobi(rok, mesic, ctvrt), forma: {R:'řádné',O:'opravné',N:'následné'}[forma]||forma,
     danPlatba:null, danVraceni:null, platba:null,
-    errors, warnings:[], valid: errors.length===0,
+    sumZbozi, sumSluzby, sumTrojstr,
+    errors, warnings, valid: errors.length===0, _doc: doc,
   };
 }
+
 
 // ── QR SPAYD ──────────────────────────────────────────────────────────────
 function buildQR(p) {
@@ -800,12 +822,32 @@ function renderAll(items) {
   let html = '';
 
   // ── Krok 1: Párová kontrola KH ↔ DP ──────────────────────────────────────
-  const dpItems = items.filter(i => i.typ === 'DPHDP3');
-  const khItems = items.filter(i => i.typ === 'DPHKH1');
+  const dpItems  = items.filter(i => i.typ === 'DPHDP3');
+  const khItems  = items.filter(i => i.typ === 'DPHKH1');
+  const shvItems = items.filter(i => i.typ === 'DPHSHV');
   const parovani = [];
   for (const kh of khItems) {
     const dp = dpItems.find(d => d.dic === kh.dic && d.obdobi === kh.obdobi);
     if (dp) parovani.push({ kh, dp });
+  }
+
+  // Párování SH ↔ DP
+  const shvParovani = [];
+  for (const shv of shvItems) {
+    const dp = dpItems.find(d => d.dic === shv.dic && d.obdobi === shv.obdobi);
+    if (dp) shvParovani.push({ shv, dp });
+  }
+
+  // Upozornění na chybějící SH: DP má ř.20/21 a SH chybí
+  for (const dp of dpItems) {
+    const v2 = dp._doc?.querySelector('Veta2');
+    const dpSluzby = parseFloat(v2?.getAttribute('pln_sluzby') || 0);
+    const dpZbozi  = parseFloat(v2?.getAttribute('pln_zbozi')  || 0);
+    const dpTrojstr= parseFloat(v2?.getAttribute('pln_trojstr')|| 0);
+    const maSH = shvItems.some(s => s.dic === dp.dic && s.obdobi === dp.obdobi);
+    if (!maSH && (dpSluzby > 0 || dpZbozi > 0 || dpTrojstr > 0)) {
+      dp.warnings.push({t:'warn', msg:`Chybí souhrnné hlášení (VIES): DP obsahuje plnění do JČS (ř.20: ${dpZbozi>0?fmtMoney(dpZbozi)+' zboží':''}${dpSluzby>0?(dpZbozi>0?', ':'')+fmtMoney(dpSluzby)+' služby':''}) — nahrajte soubor SH`});
+    }
   }
 
   html += `<p class="step-label">Krok 1 — Párová kontrola KH ↔ Přiznání</p>`;
@@ -880,6 +922,63 @@ function renderAll(items) {
   }
 
   html += `<hr class="section-divider">`;
+
+  // ── SH ↔ DP křížová kontrola ─────────────────────────────────────────────
+  if (shvParovani.length > 0) {
+    html += `<p class="step-label" style="margin-top:0">Krok 1b — Párová kontrola SH ↔ Přiznání</p>`;
+    for (const { shv, dp } of shvParovani) {
+      const v2 = dp._doc?.querySelector('Veta2');
+      const g2 = a => parseFloat(v2?.getAttribute(a) || 0);
+      const fmt2 = n => n.toLocaleString('cs-CZ', {minimumFractionDigits:2, maximumFractionDigits:2});
+
+      const radky = [
+        ['ř.20 · Dodání zboží do JČS §64',        shv.sumZbozi,   g2('pln_zbozi'),   'KH SH k_pln=0 → DP ř.20'],
+        ['ř.21 · Poskytnutí služeb do JČS §102',   shv.sumSluzby,  g2('pln_sluzby'),  'KH SH k_pln=3 → DP ř.21'],
+        ['ř.30 · Třístranný obchod §17',           shv.sumTrojstr, g2('pln_trojstr'), 'KH SH k_pln=2 → DP ř.30'],
+      ].filter(([,sv,dv]) => sv !== 0 || dv !== 0);
+
+      const nesody = radky.filter(([,sv,dv]) => Math.abs(sv-dv) > 1);
+
+      html += `<div class="result-card">
+        <div class="result-header">
+          <div>
+            <div class="result-title">SH ↔ Přiznání · ${shv.dic}${shv.nazev ? ' · '+shv.nazev : ''}</div>
+            <div class="result-sub">Zdaňovací období ${shv.obdobi} · ${shv.nazevFu||''}</div>
+          </div>
+          ${nesody.length === 0
+            ? `<span class="pill pill-ok">✓ Součty sedí</span>`
+            : `<span class="pill pill-err">${nesody.length} ${nesody.length===1?'neshoda':'neshody'}</span>`}
+        </div>
+        <div class="result-body" style="padding:0 16px 16px">
+          <table class="main-table" style="margin-top:12px">
+            <thead><tr>
+              <th>Kontrolní řádek</th><th>Mapování</th>
+              <th style="text-align:right">SH (Kč)</th>
+              <th style="text-align:right">DP (Kč)</th>
+              <th style="text-align:center">Stav</th>
+            </tr></thead>
+            <tbody>
+              ${radky.map(([popis, sv, dv, map]) => {
+                const diff = Math.abs(sv-dv);
+                const ok = diff <= 1;
+                return `<tr>
+                  <td>${popis}</td>
+                  <td style="color:var(--text-faint);font-size:12px">${map}</td>
+                  <td style="text-align:right;font-variant-numeric:tabular-nums">${fmt2(sv)}</td>
+                  <td style="text-align:right;font-variant-numeric:tabular-nums">${fmt2(dv)}</td>
+                  <td style="text-align:center">${ok
+                    ? `<span class="pill pill-ok" style="font-size:11px">✓ OK</span>`
+                    : `<span class="pill pill-err" style="font-size:11px">✕ ${fmt2(diff)} Kč</span>`}
+                  </td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+    }
+    html += `<hr class="section-divider">`;
+  }
 
   // ── Krok 2: Výsledky zpracování ───────────────────────────────────────────
   html += `<p class="step-label">Krok 2 — Výsledky zpracování</p>`;
