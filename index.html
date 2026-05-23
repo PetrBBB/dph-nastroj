@@ -321,7 +321,7 @@
     </div>
     <div>
       <p class="header-app">XML přiznání DPH → Platby</p>
-      <p class="header-ver">v1.13 · DPHDP3 · DPHKH1 · DPHSHV · Flexi XML</p>
+      <p class="header-ver">v1.16 · DPHDP3 · DPHKH1 · DPHSHV · Flexi XML</p>
     </div>
   </div>
 
@@ -820,11 +820,17 @@ function renderAll(items) {
       const g = (el, a) => parseFloat(el?.getAttribute(a) || 0);
 
       const radky = [
-        ['Základ plnění na výstupu',          g(vC,'obrat23')+g(vC,'obrat5'),         g(v1,'obrat23')+g(v1,'obrat5'),        'DP ř.1+2 ↔ KH A.4+A.5'],
-        ['Základ přenesení na výstupu',        g(vC,'rez_pren23')+g(vC,'rez_pren5'),   g(v1,'rez_pren23')+g(v1,'rez_pren5'),  'DP ř.3+4 ↔ KH A.1'],
-        ['Základ zahraničních přijatých plnění',g(vC,'celk_zd_a2'),                    g(v1,'p_sl23_e')+g(v1,'p_sl5_e'),      'DP ř.5+6 ↔ KH A.2'],
-        ['Základ přijatých tuzemských plnění', g(vC,'pln23')+g(vC,'pln5'),             g(v4,'pln23')+g(v4,'pln5'),            'DP ř.40+41 ↔ KH B.2+B.3'],
-        ['Základ přijatých přenesení',         g(vC,'rez_pren23')+g(vC,'rez_pren5'),   g(v4,'nar_zdp23')+g(v4,'nar_zdp5'),   'DP ř.43+44 ↔ KH B.1'],
+        // Přesně dle sekce C "Kontrolní řádky na Daňové přiznání k DPH" z ABRA Flexi
+        ['ř.1  · A.4.+A.5. základ 21 %',               g(vC,'obrat23'),      g(v1,'obrat23'),                     'KH A.4.+A.5. → DP ř.1'],
+        ['ř.2  · A.4.+A.5. základ 12 %',               g(vC,'obrat5'),       g(v1,'obrat5'),                      'KH A.4.+A.5. → DP ř.2'],
+        ['ř.10 · B.1. základ 21 %',                    g(vC,'rez_pren23'),   g(v1,'rez_pren23'),                  'KH B.1. → DP ř.10'],
+        ['ř.11 · B.1. základ 12 %',                    g(vC,'rez_pren5'),    g(v1,'rez_pren5'),                   'KH B.1. → DP ř.11'],
+        ['ř.3–13 · A.2. základ zahraničních přijatých',g(vC,'celk_zd_a2'),   g(v1,'p_sl23_e')+g(v1,'p_sl5_e'),   'KH A.2. → DP ř.5+6'],
+        ['ř.25 · A.1. dodavatel přenesení',             g(vC,'pln_rez_pren'), 0,                                   'KH A.1. → DP ř.25'],
+        ['ř.40 · B.2.+B.3. základ 21 %',               g(vC,'pln23'),        g(v4,'pln23'),                       'KH B.2.+B.3. → DP ř.40'],
+        ['ř.41 · B.2.+B.3. základ 12 %',               g(vC,'pln5'),         g(v4,'pln5'),                        'KH B.2.+B.3. → DP ř.41'],
+        // Navíc: ř.43+44 odpočet = B.1. + A.2. (ověřovací kontrola odpočtu)
+        ['ř.43+44 · odpočet přenesení+zahraniční',      g(vC,'rez_pren23')+g(vC,'rez_pren5')+g(vC,'celk_zd_a2'), g(v4,'nar_zdp23')+g(v4,'nar_zdp5'), 'KH B.1.+A.2. → DP ř.43+44'],
       ];
 
       const fmt2 = n => n.toLocaleString('cs-CZ', {minimumFractionDigits:2, maximumFractionDigits:2});
