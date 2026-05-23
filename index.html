@@ -321,7 +321,7 @@
     </div>
     <div>
       <p class="header-app">XML přiznání DPH → Platby</p>
-      <p class="header-ver">v1.12 · DPHDP3 · DPHKH1 · DPHSHV · Flexi XML</p>
+      <p class="header-ver">v1.13 · DPHDP3 · DPHKH1 · DPHSHV · Flexi XML</p>
     </div>
   </div>
 
@@ -1055,7 +1055,7 @@ function openGmail(typ, idx) {
   let obdobiText = item.obdobi; // např. "04/2026" nebo "Q1/2026" — použijeme přímo
 
   const podpis = '\n\nS pozdravem\nIng. Petr Bureš\nÚčetní';
-  const predmet = `DPH ${item.obdobi}`;
+  const predmet = `DPH ${item.obdobi}${item.nazev ? ' - ' + item.nazev : ''}`;
 
   let telo;
   if (typ === 'vraceni' && item.danVraceni !== null) {
