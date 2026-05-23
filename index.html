@@ -321,7 +321,7 @@
     </div>
     <div>
       <p class="header-app">XML přiznání DPH → Platby</p>
-      <p class="header-ver">v1.18 · DPHDP3 · DPHKH1 · DPHSHV · Flexi XML</p>
+      <p class="header-ver">v1.20 · DPHDP3 · DPHKH1 · DPHSHV · Flexi XML</p>
     </div>
   </div>
 
@@ -841,12 +841,19 @@ function renderAll(items) {
   // Upozornění na chybějící SH: DP má ř.20/21 a SH chybí
   for (const dp of dpItems) {
     const v2 = dp._doc?.querySelector('Veta2');
-    const dpSluzby = parseFloat(v2?.getAttribute('pln_sluzby') || 0);
-    const dpZbozi  = parseFloat(v2?.getAttribute('pln_zbozi')  || 0);
-    const dpTrojstr= parseFloat(v2?.getAttribute('pln_trojstr')|| 0);
+    const dpSluzby  = parseFloat(v2?.getAttribute('pln_sluzby')  || 0);
+    const dpZbozi   = parseFloat(v2?.getAttribute('dod_zb')      || 0); // ř.20 dodání zboží do JČS §64
+    const dpTrojstr = parseFloat(v2?.getAttribute('pln_trojstr') || 0);
+    const dpZaslani = 0; // ř.24 zasílání — do SH nepatří
+    const dpCelkem  = dpSluzby + dpZbozi + dpTrojstr;
     const maSH = shvItems.some(s => s.dic === dp.dic && s.obdobi === dp.obdobi);
-    if (!maSH && (dpSluzby > 0 || dpZbozi > 0 || dpTrojstr > 0)) {
-      dp.warnings.push({t:'warn', msg:`Chybí souhrnné hlášení (VIES): DP obsahuje plnění do JČS (ř.20: ${dpZbozi>0?fmtMoney(dpZbozi)+' zboží':''}${dpSluzby>0?(dpZbozi>0?', ':'')+fmtMoney(dpSluzby)+' služby':''}) — nahrajte soubor SH`});
+    if (!maSH && dpCelkem > 0) {
+      const casti = [
+        dpZbozi   > 0 ? `zboží §64: ${fmtMoney(dpZbozi)}`       : '',
+        dpSluzby  > 0 ? `služby §102: ${fmtMoney(dpSluzby)}`     : '',
+        dpTrojstr > 0 ? `třístranný §17: ${fmtMoney(dpTrojstr)}` : '',
+      ].filter(Boolean).join(', ');
+      dp.warnings.push({t:'warn', msg:`Chybí souhrnné hlášení (VIES): DP obsahuje plnění do JČS (${casti}) — nahrajte soubor SH`});
     }
   }
 
@@ -932,7 +939,7 @@ function renderAll(items) {
       const fmt2 = n => n.toLocaleString('cs-CZ', {minimumFractionDigits:2, maximumFractionDigits:2});
 
       const radky = [
-        ['ř.20 · Dodání zboží do JČS §64',        shv.sumZbozi,   g2('pln_zbozi'),   'KH SH k_pln=0 → DP ř.20'],
+        ['ř.20 · Dodání zboží do JČS §64',        shv.sumZbozi,   g2('dod_zb'),      'SH k_pln=0 → DP ř.20'],
         ['ř.21 · Poskytnutí služeb do JČS §102',   shv.sumSluzby,  g2('pln_sluzby'),  'KH SH k_pln=3 → DP ř.21'],
         ['ř.30 · Třístranný obchod §17',           shv.sumTrojstr, g2('pln_trojstr'), 'KH SH k_pln=2 → DP ř.30'],
       ].filter(([,sv,dv]) => sv !== 0 || dv !== 0);
