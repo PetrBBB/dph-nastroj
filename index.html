@@ -327,7 +327,7 @@
     </div>
     <div>
       <p class="header-app">XML přiznání DPH → Platby</p>
-      <p class="header-ver">v1.25 · DPHDP3 · DPHKH1 · DPHSHV · Flexi XML</p>
+      <p class="header-ver">v1.26 · DPHDP3 · DPHKH1 · DPHSHV · Flexi XML</p>
     </div>
   </div>
 
@@ -1076,7 +1076,11 @@ function renderAll(items) {
                 <button class="btn-gmail" onclick="openGmail('vraceni',${idx})">✉ Otevřít Gmail s připraveným emailem</button>
               </div>
             </div>` : ''}
-            ${item.danPlatba===null && item.danVraceni===null && item.typ==='DPHDP3' ? `<div class="data-cell span2"><div class="data-lbl">Výsledek přiznání</div><div class="data-val normal" style="color:var(--text-muted)">Nulové přiznání — daňová povinnost ani nadměrný odpočet nevznikly</div></div>` : ''}
+            ${item.danPlatba===null && item.danVraceni===null && item.typ==='DPHDP3' ? `<div class="data-cell span2"><div class="data-lbl">Výsledek přiznání</div><div class="data-val normal" style="color:var(--text-muted)">Nulové přiznání — daňová povinnost ani nadměrný odpočet nevznikly</div>
+              <div style="margin-top:12px">
+                <button class="btn-gmail" onclick="openGmail('nulove',${idx})">✉ Otevřít Gmail s připraveným emailem</button>
+              </div>
+            </div>` : ''}
           </div>
         </div>`;
 
@@ -1172,6 +1176,8 @@ function openGmail(typ, idx) {
   } else if (typ === 'platba' && item.platba) {
     const p = item.platba;
     telo = `Dobrý den,\n\nv příloze zasílám náhled DPH za ${obdobiText} a informace k platbě daně.\n\nČástka k úhradě: ${fmtMoney(p.castka)}\nČíslo účtu: ${p.ucet}\nVariabilní symbol: ${p.vs}\nDatum splatnosti: ${p.splatnost||'—'}${podpis}`;
+  } else if (typ === 'nulove') {
+    telo = `Dobrý den,\n\nv příloze zasílám náhled DPH za ${obdobiText}. Přiznání je nulové, daňová povinnost ani nadměrný odpočet nevznikly.${podpis}`;
   } else {
     return;
   }
