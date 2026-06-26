@@ -327,7 +327,7 @@
     </div>
     <div>
       <p class="header-app">XML přiznání DPH → Platby</p>
-      <p class="header-ver">v1.26 · DPHDP3 · DPHKH1 · DPHSHV · Flexi XML</p>
+      <p class="header-ver">v1.27 · DPHDP3 · DPHKH1 · DPHSHV · Flexi XML</p>
     </div>
   </div>
 
@@ -642,7 +642,24 @@ function parseDPHKH1(doc) {
     return maKod || maVat; // vrátí true pokud je identifikace vyplněna
   }
 
-  // ── A.1: Uskutečněná přenesení DPH ────────────────────────────────────────
+  // ── Kontrola duplicit evidenčních čísel dokladů ───────────────────────────
+  // V rámci každé sekce nesmí být stejné c_evid_dd dvakrát
+  const dupSekce = [
+    ['VetaA1', 'A.1.'], ['VetaA2', 'A.2.'], ['VetaA4', 'A.4.'],
+    ['VetaB1', 'B.1.'], ['VetaB2', 'B.2.'],
+  ];
+  for (const [tag, label] of dupSekce) {
+    const seen = new Map();
+    doc.querySelectorAll(tag).forEach(el => {
+      const evid = (el.getAttribute('c_evid_dd') || '').trim();
+      if (!evid) return;
+      if (seen.has(evid)) {
+        errors.push({t:'err', msg:`${label}: duplicitní evidenční číslo dokladu "${evid}" — řádky ${seen.get(evid)} a ${el.getAttribute('c_radku')||'?'} (DIČ ${el.getAttribute('dic_dod')||el.getAttribute('dic_odb')||'?'})`});
+      } else {
+        seen.set(evid, el.getAttribute('c_radku')||'?');
+      }
+    });
+  }
   // Povinné: DIČ odběratele (české), EVID, DUZP, základ daně, kód předmětu plnění
   const PLATNE_KODY_PREDMETU = new Set(['1','1a','3','3a','4','4a','5','6','7','11','12','13','14','15','16','17','18','19','20','21']);
   doc.querySelectorAll('VetaA1').forEach(el => {
